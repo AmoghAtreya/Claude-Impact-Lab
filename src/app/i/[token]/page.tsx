@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
 import { hashIntakeToken, isIntakeToken } from "@/lib/intake-links";
+import { getIntakeProgress } from "@/lib/intake-ai";
 import { getIntakePhotos } from "@/lib/intake-photos";
 import { createClient } from "@/lib/supabase/server";
 import { IntakeWelcome } from "../intake-welcome";
+
+// The AI analysis runs inside this page's server actions; give it room.
+export const maxDuration = 120;
 
 // Keep the token out of Referer headers and search engines.
 export const metadata: Metadata = {
@@ -47,7 +51,8 @@ async function Intake({ params }: Pick<PageProps<"/i/[token]">, "params">) {
   // Viewing never changes the link, so message previews and prefetching
   // can't use it up.
   switch (link.status) {
-    case "active":
+    case "active": {
+      const [photos, progress] = await Promise.all([getIntakePhotos(token), getIntakeProgress(token)]);
       return (
         <IntakeWelcome
           businessName={link.business_name}
@@ -55,11 +60,13 @@ async function Intake({ params }: Pick<PageProps<"/i/[token]">, "params">) {
           businessPhone={link.business_phone}
           live={{
             token,
-            photos: await getIntakePhotos(token),
+            photos,
             description: link.customer_description ?? "",
+            answers: progress.answers,
           }}
         />
       );
+    }
     case "submitted":
       return (
         <Unavailable title="Thanks, your details were sent">

@@ -1,4 +1,5 @@
 import "server-only";
+import convertHeic from "heic-convert";
 import sharp from "sharp";
 import { hashIntakeToken } from "@/lib/intake-links";
 import {
@@ -18,7 +19,6 @@ const THUMBNAIL_SIZE = 480;
 const MIN_SIZE = 200;
 const SIGNED_URL_SECONDS = 60 * 60;
 // Formats detected from the file contents, not the browser-reported type.
-// HEIF decoding depends on the codec; failures get a "couldn't read" error.
 const SUPPORTED_FORMATS = new Set(["jpeg", "png", "webp", "heif"]);
 
 export type IntakeResult<T = object> =
@@ -60,10 +60,16 @@ async function processIntakePhoto(
   }
 
   try {
-    const input = Buffer.from(await file.arrayBuffer());
-    const { format } = await sharp(input).metadata();
+    let input = Buffer.from(await file.arrayBuffer());
+    const { format, compression } = await sharp(input).metadata();
     if (!format || !SUPPORTED_FORMATS.has(format)) {
       return { ok: false, error: "Use a JPEG, PNG, or WebP photo." };
+    }
+    // Sharp's prebuilt binaries can't decode HEVC, which iPhone HEIC photos
+    // use (AVIF, the other HEIF codec, works). Convert those to JPEG first;
+    // libheif applies the photo's rotation while decoding.
+    if (format === "heif" && compression === "hevc") {
+      input = Buffer.from(await convertHeic({ buffer: input, format: "JPEG", quality: 0.92 }));
     }
 
     const { data: full, info } = await sharp(input, {
