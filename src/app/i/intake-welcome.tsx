@@ -1,3 +1,4 @@
+import type { IntakePhoto } from "@/lib/intake-photo-rules";
 import { IntakeWizard } from "./intake-wizard";
 
 // The customer experience. Shared by /i/[token] and the contractor preview
@@ -7,11 +8,14 @@ export function IntakeWelcome({
   customerName,
   businessPhone,
   embedded,
+  live,
 }: {
   businessName: string;
   customerName: string;
   businessPhone?: string | null;
   embedded?: boolean;
+  /** A real intake link: photos are uploaded and saved. Omit for previews. */
+  live?: { token: string; photos: IntakePhoto[] };
 }) {
   return (
     <IntakeWizard
@@ -19,6 +23,7 @@ export function IntakeWelcome({
       customerName={customerName}
       businessPhone={businessPhone}
       embedded={embedded}
+      live={live}
     />
   );
 }

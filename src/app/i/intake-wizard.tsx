@@ -2,9 +2,16 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { HVAC_PHOTO_PROMPTS, analyzeIntake, readPhoto } from "@/lib/intake-demo";
+import { INTAKE_PHOTO_MAX_BYTES, type IntakePhoto } from "@/lib/intake-photo-rules";
 import type { IntakeAnalysis, IntakeAnswers, IntakeQuestion, PhotoReading } from "@/lib/intake-types";
 
-type Photo = { url: string; reading: PhotoReading | null };
+// Where a photo is in being saved. "local" photos (preview, demo) are never uploaded.
+type PhotoUpload =
+  | { status: "local" }
+  | { status: "uploading"; progress: number }
+  | { status: "saved"; id: string }
+  | { status: "failed"; error: string; retryable: boolean; file: File; replaces: string | null };
+type Photo = { url: string; reading: PhotoReading | null; upload: PhotoUpload };
 type Step =
   | { kind: "welcome" }
   | { kind: "photo"; index: number }
@@ -21,16 +28,24 @@ export function IntakeWizard({
   customerName,
   businessPhone,
   embedded = false,
+  live,
 }: {
   businessName: string;
   customerName: string;
   businessPhone?: string | null;
   /** Inside the contractor preview card instead of full screen. */
   embedded?: boolean;
+  /** A real intake link: photos upload as they're taken and are restored on reload. */
+  live?: { token: string; photos: IntakePhoto[] };
 }) {
   const prompts = HVAC_PHOTO_PROMPTS;
   const [step, setStep] = useState<Step>({ kind: "welcome" });
-  const [photos, setPhotos] = useState<(Photo | null)[]>(() => prompts.map(() => null));
+  const [photos, setPhotos] = useState<(Photo | null)[]>(() =>
+    prompts.map((prompt) => {
+      const saved = live?.photos.find((photo) => photo.promptId === prompt.id);
+      return saved ? { url: saved.thumbnailUrl, reading: null, upload: { status: "saved", id: saved.id } } : null;
+    }),
+  );
   const [analysis, setAnalysis] = useState<IntakeAnalysis | null>(null);
   const [readCount, setReadCount] = useState(0);
   const [answers, setAnswers] = useState<IntakeAnswers>({});
@@ -41,6 +56,18 @@ export function IntakeWizard({
   useEffect(() => {
     const urls = objectUrls.current;
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, []);
+
+  // Photos saved on an earlier visit still need a reading.
+  useEffect(() => {
+    prompts.forEach((prompt, index) => {
+      if (!live?.photos.some((photo) => photo.promptId === prompt.id)) return;
+      readPhoto(prompt.id).then((reading) =>
+        setPhotos((prev) => prev.map((p, i) => (i === index && p && !p.reading ? { ...p, reading } : p))),
+      );
+    });
+    // Only for what the page loaded with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Start analysis as soon as we reach the reading screen; tick the steps off.
@@ -69,22 +96,62 @@ export function IntakeWizard({
     setStep({ kind: "reading" });
   }
 
+  function setUpload(index: number, url: string, upload: PhotoUpload) {
+    setPhotos((prev) => prev.map((p, i) => (i === index && p?.url === url ? { ...p, upload } : p)));
+  }
+
+  // Uploads in the background so the customer is never blocked. Network
+  // failures retry automatically before asking the customer.
+  async function savePhoto(index: number, url: string, file: File, replaces: string | null) {
+    if (!live) return;
+    for (let attempt = 0; ; attempt++) {
+      setUpload(index, url, { status: "uploading", progress: 0 });
+      const result = await uploadPhoto(live.token, file, prompts[index].id, replaces, (progress) =>
+        setUpload(index, url, { status: "uploading", progress }),
+      );
+      if (result.ok) {
+        setUpload(index, url, { status: "saved", id: result.photo.id });
+        return;
+      }
+      if (!result.retryable || attempt >= 2) {
+        setUpload(index, url, { status: "failed", error: result.error, retryable: result.retryable, file, replaces });
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+    }
+  }
+
   function addPhoto(index: number, file: File) {
     const url = URL.createObjectURL(file);
     objectUrls.current.push(url);
+    const previous = photos[index];
+    // A retake replaces the saved photo for this prompt.
+    const replaces =
+      previous?.upload.status === "saved"
+        ? previous.upload.id
+        : previous?.upload.status === "failed"
+          ? previous.upload.replaces
+          : null;
+    const tooLarge = file.size > INTAKE_PHOTO_MAX_BYTES;
+    const upload: PhotoUpload = !live
+      ? { status: "local" }
+      : tooLarge
+        ? { status: "failed", error: "This photo is larger than 10 MB. Retake it or choose a smaller one.", retryable: false, file, replaces }
+        : { status: "uploading", progress: 0 };
     setPhotos((prev) => {
       const next = [...prev];
       if (next[index]) URL.revokeObjectURL(next[index]!.url);
-      next[index] = { url, reading: null };
+      next[index] = { url, reading: null, upload };
       return next;
     });
     readPhoto(prompts[index].id).then((reading) =>
       setPhotos((prev) => {
         const next = [...prev];
-        if (next[index]?.url === url) next[index] = { url, reading };
+        if (next[index]?.url === url) next[index] = { ...next[index]!, reading };
         return next;
       }),
     );
+    if (upload.status === "uploading") void savePhoto(index, url, file, replaces);
   }
 
   if (step.kind === "welcome") {
@@ -123,6 +190,7 @@ export function IntakeWizard({
     const prompt = prompts[step.index];
     const photo = photos[step.index];
     const isLast = step.index === prompts.length - 1;
+    const unusable = photo?.upload.status === "failed" && !photo.upload.retryable;
     const next = () => (isLast ? goToReading() : setStep({ kind: "photo", index: step.index + 1 }));
     return (
       <Screen
@@ -131,10 +199,15 @@ export function IntakeWizard({
         action={
           photo ? (
             <>
-              <PhotoInput capture onFile={(f) => addPhoto(step.index, f)} variant="ghost">
+              <PhotoInput
+                capture
+                onFile={(f) => addPhoto(step.index, f)}
+                variant="ghost"
+                disabled={photo.upload.status === "uploading"}
+              >
                 Retake
               </PhotoInput>
-              <Primary onClick={next} disabled={!photo.reading} grow>
+              <Primary onClick={next} disabled={!photo.reading || unusable} grow>
                 {photo.reading ? (isLast ? "Done with photos" : "Next photo") : "Checking…"}
               </Primary>
             </>
@@ -167,6 +240,13 @@ export function IntakeWizard({
             >
               {photo.reading ? `✓ We read: ${photo.reading.summary}` : "Checking your photo…"}
             </div>
+            <UploadStatus
+              upload={photo.upload}
+              onRetry={(failed) => {
+                setUpload(step.index, photo.url, { status: "uploading", progress: 0 });
+                void savePhoto(step.index, photo.url, failed.file, failed.replaces);
+              }}
+            />
           </>
         ) : (
           <>
@@ -407,22 +487,26 @@ function PhotoInput({
   capture,
   variant = "primary",
   grow,
+  disabled,
 }: {
   children: ReactNode;
   onFile: (file: File) => void;
   capture?: boolean;
   variant?: "primary" | "ghost";
   grow?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <label
-      className={`${buttonBase} cursor-pointer ${grow ? "flex-[2]" : "flex-1"} ${
+      aria-disabled={disabled}
+      className={`${buttonBase} ${disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer"} ${grow ? "flex-[2]" : "flex-1"} ${
         variant === "primary" ? "bg-accent text-accent-ink" : "border-[1.5px] border-line bg-white"
       }`}
     >
       {children}
       <input
         type="file"
+        disabled={disabled}
         // JPEG first so iOS Safari converts HEIC (see docs/design/research).
         accept="image/jpeg,image/png,image/webp,image/*"
         {...(capture ? { capture: "environment" as const } : {})}
@@ -435,6 +519,75 @@ function PhotoInput({
       />
     </label>
   );
+}
+
+// Upload progress for live links. Previews and the demo show nothing.
+function UploadStatus({
+  upload,
+  onRetry,
+}: {
+  upload: PhotoUpload;
+  onRetry: (failed: Extract<PhotoUpload, { status: "failed" }>) => void;
+}) {
+  if (upload.status === "local") return null;
+  if (upload.status === "saved") {
+    return <p className="mt-2 text-sm text-muted">Photo saved</p>;
+  }
+  if (upload.status === "uploading") {
+    const percent = Math.round(upload.progress * 100);
+    return (
+      <div className="mt-2" aria-live="polite">
+        <p className="text-sm text-muted">{percent < 100 ? `Saving photo… ${percent}%` : "Saving photo…"}</p>
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-chip">
+          <div className="h-full bg-accent-strong transition-[width]" style={{ width: `${percent}%` }} />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div role="alert" className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-danger-soft p-3 text-[15px] text-danger">
+      <span>{upload.error}</span>
+      {upload.retryable ? (
+        <button type="button" onClick={() => onRetry(upload)} className="shrink-0 font-bold underline">
+          Try again
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+// XMLHttpRequest rather than fetch, which can't report upload progress.
+function uploadPhoto(
+  token: string,
+  file: File,
+  promptId: string,
+  replaces: string | null,
+  onProgress: (progress: number) => void,
+): Promise<{ ok: true; photo: IntakePhoto } | { ok: false; error: string; retryable: boolean }> {
+  const failed = { ok: false as const, error: "Your photo didn’t save. Check your connection.", retryable: true };
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/i/${token}/photos`);
+    xhr.setRequestHeader("X-Intake-Upload", "1");
+    xhr.responseType = "json";
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      const body = xhr.response as { photo?: IntakePhoto; error?: string } | null;
+      if (xhr.status === 200 && body?.photo) resolve({ ok: true, photo: body.photo });
+      // 4xx: the photo or link was rejected; retrying won't help.
+      else if (xhr.status >= 400 && xhr.status < 500 && body?.error) resolve({ ok: false, error: body.error, retryable: false });
+      else resolve(failed);
+    };
+    xhr.onerror = () => resolve(failed);
+
+    const form = new FormData();
+    form.append("photo", file);
+    form.append("prompt", promptId);
+    if (replaces) form.append("replaces", replaces);
+    xhr.send(form);
+  });
 }
 
 function QuestionBody({

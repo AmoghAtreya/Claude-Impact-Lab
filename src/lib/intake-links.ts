@@ -21,6 +21,13 @@ export function deriveIntakeToken(linkId: string) {
     .digest("base64url");
 }
 
+// Derived tokens are 32-byte HMACs in base64url.
+const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+export function isIntakeToken(value: string) {
+  return TOKEN_PATTERN.test(value);
+}
+
 export function hashIntakeToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }

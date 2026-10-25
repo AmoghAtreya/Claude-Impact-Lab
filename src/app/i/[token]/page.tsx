@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
-import { hashIntakeToken } from "@/lib/intake-links";
+import { hashIntakeToken, isIntakeToken } from "@/lib/intake-links";
+import { getIntakePhotos } from "@/lib/intake-photos";
 import { createClient } from "@/lib/supabase/server";
 import { IntakeWelcome } from "../intake-welcome";
 
@@ -19,9 +20,6 @@ type LinkRow = {
   customer_name: string;
 };
 
-// Derived tokens are 32-byte HMACs in base64url.
-const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
-
 export default function IntakePage({ params }: PageProps<"/i/[token]">) {
   return (
     <main className="min-h-dvh">
@@ -34,7 +32,7 @@ export default function IntakePage({ params }: PageProps<"/i/[token]">) {
 
 async function Intake({ params }: Pick<PageProps<"/i/[token]">, "params">) {
   const { token } = await params;
-  const link = TOKEN_PATTERN.test(token) ? await lookUpLink(token) : null;
+  const link = isIntakeToken(token) ? await lookUpLink(token) : null;
 
   if (!link) {
     return (
@@ -54,6 +52,7 @@ async function Intake({ params }: Pick<PageProps<"/i/[token]">, "params">) {
           businessName={link.business_name}
           customerName={link.customer_name}
           businessPhone={link.business_phone}
+          live={{ token, photos: await getIntakePhotos(token) }}
         />
       );
     case "submitted":

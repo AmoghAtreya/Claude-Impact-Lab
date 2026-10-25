@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { statusClassName } from "@/app/ui/form-styles";
+import { HVAC_PHOTO_PROMPTS } from "@/lib/intake-demo";
 import { intakeUrl } from "@/lib/intake-links";
+import { listRequestPhotos, type RequestPhoto } from "@/lib/intake-photos";
 import {
   getServiceRequest,
   INTAKE_STATUS_LABELS,
@@ -114,6 +116,64 @@ async function RequestDetail({
           ))}
         </dl>
       </section>
+
+      <section className="rounded-lg border border-neutral-200 bg-white p-5 sm:p-6">
+        <h2 className="mb-4 text-base font-semibold">Customer photos</h2>
+        {request.limitedVisualInfo ? (
+          <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            Limited visual information: the customer couldn&apos;t provide a
+            photo.
+          </p>
+        ) : null}
+        {request.customerDescription ? (
+          <div className="mb-4 space-y-1">
+            <p className="text-sm text-neutral-600">
+              Customer&apos;s description
+            </p>
+            <p className="whitespace-pre-line text-sm text-neutral-900">
+              {request.customerDescription}
+            </p>
+          </div>
+        ) : null}
+        <RequestPhotoGallery
+          photos={await listRequestPhotos(workspace.id, request.id)}
+        />
+      </section>
     </>
+  );
+}
+
+function RequestPhotoGallery({ photos }: { photos: RequestPhoto[] }) {
+  if (photos.length === 0) {
+    return <p className="text-sm text-neutral-400">No photos yet.</p>;
+  }
+  return (
+    <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      {photos.map((photo, index) => {
+        const label =
+          HVAC_PHOTO_PROMPTS.find((prompt) => prompt.id === photo.promptId)
+            ?.title ?? `Customer photo ${index + 1}`;
+        return (
+          <li key={photo.id} className="space-y-1.5">
+            <a
+              href={photo.fullUrl ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="block aspect-square overflow-hidden rounded-md bg-neutral-100"
+            >
+              {photo.thumbnailUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+                <img
+                  src={photo.thumbnailUrl}
+                  alt={label}
+                  className="size-full object-contain"
+                />
+              ) : null}
+            </a>
+            <p className="text-sm text-neutral-700">{label}</p>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
