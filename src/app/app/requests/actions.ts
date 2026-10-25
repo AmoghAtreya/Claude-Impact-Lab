@@ -6,10 +6,11 @@ import { after } from "next/server";
 import { z } from "zod";
 import { retryBrief, runBriefJob } from "@/lib/intake-ai";
 import { newIntakeLink } from "@/lib/intake-links";
+import { processStorageDeletions } from "@/lib/storage-cleanup";
 import { createClient } from "@/lib/supabase/server";
 import { TRADE_OTHER_MAX_LENGTH, TRADES, type Trade } from "@/lib/trades";
 import { PHONE_PATTERN, PHONE_PATTERN_MESSAGE } from "@/lib/validation";
-import { requireWorkspace } from "@/lib/workspace";
+import { canManageWorkspace, requireWorkspace } from "@/lib/workspace";
 
 export type RequestField =
   | "customerName"
@@ -222,4 +223,79 @@ export async function retryBriefAction(requestId: string) {
   after(() => runBriefJob(result.jobId));
   revalidatePath(`/app/requests/${requestId}`);
   return {};
+}
+
+export async function revokeIntakeLink(requestId: string) {
+  await requireWorkspace();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("revoke_intake_link", {
+    p_service_request_id: requestId,
+  });
+  if (error) {
+    return { error: "We couldn't revoke the link. Please try again." };
+  }
+
+  revalidatePath(`/app/requests/${requestId}`);
+  return {};
+}
+
+// Archived requests leave the default list. Restoring treats the request
+// as reviewed, the step before archiving. RLS limits the update to the
+// user's workspace.
+export async function setRequestArchived(requestId: string, archived: boolean) {
+  const { workspace } = await requireWorkspace();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("service_requests")
+    .update({ review_status: archived ? "archived" : "reviewed" })
+    .eq("id", requestId)
+    .eq("organization_id", workspace.id)
+    .select("id");
+  if (error || data.length === 0) {
+    return {
+      error: archived
+        ? "We couldn't archive the request. Please try again."
+        : "We couldn't restore the request. Please try again.",
+    };
+  }
+
+  revalidatePath(`/app/requests/${requestId}`);
+  revalidatePath("/app/requests");
+  return {};
+}
+
+// Permanently deletes the request, its links, answers, and photos. The
+// database checks the caller's role and queues the photo files, which are
+// then deleted from storage; failures stay queued and are retried by the
+// next deletion.
+export async function deleteServiceRequest(requestId: string, confirmation: string) {
+  const { workspace } = await requireWorkspace();
+  if (!canManageWorkspace(workspace)) {
+    return { error: "Only owners and admins can delete requests." };
+  }
+
+  const supabase = await createClient();
+  const { data: request } = await supabase
+    .from("service_requests")
+    .select("number")
+    .eq("id", requestId)
+    .eq("organization_id", workspace.id)
+    .maybeSingle<{ number: number }>();
+  if (!request) {
+    return { error: "This request no longer exists." };
+  }
+  if (confirmation.trim().replace(/^#/, "") !== String(request.number)) {
+    return { error: `Type ${request.number} to confirm.` };
+  }
+
+  const { error } = await supabase.rpc("delete_service_request", {
+    p_service_request_id: requestId,
+  });
+  if (error) {
+    return { error: "We couldn't delete the request. Please try again." };
+  }
+  await processStorageDeletions();
+
+  revalidatePath("/app/requests");
+  redirect(`/app/requests?deleted=${request.number}`);
 }

@@ -11,9 +11,10 @@ import {
   requestReference,
 } from "@/lib/service-requests";
 import { tradeLabel } from "@/lib/trades";
-import { requireWorkspace } from "@/lib/workspace";
+import { canManageWorkspace, requireWorkspace } from "@/lib/workspace";
 import { BriefPanel, CustomerAnswers } from "./brief-panel";
 import { IntakeLinkPanel } from "./intake-link-panel";
+import { ManageRequestPanel } from "./manage-request-panel";
 
 export default function RequestPage({
   params,
@@ -75,6 +76,7 @@ async function RequestDetail({
           </span>
         </h1>
         <p className="text-sm text-neutral-600">
+          {request.reviewStatus === "archived" ? "Archived · " : null}
           {INTAKE_STATUS_LABELS[request.intakeStatus]} · Created{" "}
           {formatDateTime.format(new Date(request.createdAt))}
         </p>
@@ -152,6 +154,15 @@ async function RequestDetail({
         ) : null}
         <RequestPhotoGallery photos={photos} />
       </section>
+
+      <ManageRequestPanel
+        requestId={request.id}
+        requestNumber={request.number}
+        archived={request.reviewStatus === "archived"}
+        canDelete={canManageWorkspace(workspace)}
+        photoCount={photos.length}
+        hasActiveLink={Boolean(link && !link.expired)}
+      />
     </>
   );
 }
