@@ -1,0 +1,152 @@
+"use client";
+
+import Link from "next/link";
+import { useState, useSyncExternalStore, useTransition } from "react";
+import { primaryButtonClassName } from "@/app/ui/form-styles";
+import { markIntakeLinkShared, regenerateIntakeLink } from "../actions";
+
+type IntakeLinkPanelProps = {
+  requestId: string;
+  customerName: string;
+  businessName: string;
+  url: string | null;
+  expiresLabel: string | null;
+  expired: boolean;
+};
+
+const secondaryButtonClassName =
+  "inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-medium disabled:opacity-60";
+
+function subscribeNoop() {
+  return () => {};
+}
+
+export function IntakeLinkPanel({
+  requestId,
+  customerName,
+  businessName,
+  url,
+  expiresLabel,
+  expired,
+}: IntakeLinkPanelProps) {
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [regenerating, startRegenerate] = useTransition();
+  // The Web Share API only exists in some browsers; false during SSR.
+  const canShare = useSyncExternalStore(
+    subscribeNoop,
+    () => typeof navigator.share === "function",
+    () => false,
+  );
+
+  const usable = url !== null && !expired;
+  const message = `Hi ${customerName}, ${businessName} asked for a few details before your visit. Open this link to take a photo of the problem and answer a few questions: ${url}`;
+
+  async function copy() {
+    if (!url) return;
+    setError(null);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      void markIntakeLinkShared(requestId);
+    } catch {
+      setError("Couldn't copy automatically. Select the link and copy it.");
+    }
+  }
+
+  async function share() {
+    try {
+      await navigator.share({ text: message });
+      void markIntakeLinkShared(requestId);
+    } catch (err) {
+      // AbortError means the user closed the share sheet.
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        setError("Couldn't open sharing. Copy the link instead.");
+      }
+    }
+  }
+
+  function regenerate() {
+    if (
+      usable &&
+      !window.confirm(
+        "Create a new link? The current link will stop working for the customer.",
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    startRegenerate(async () => {
+      const result = await regenerateIntakeLink(requestId);
+      if (result.error) setError(result.error);
+    });
+  }
+
+  return (
+    <section
+      aria-labelledby="intake-link-heading"
+      className="flex flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-5 sm:p-6"
+    >
+      <div className="space-y-1">
+        <h2 id="intake-link-heading" className="text-base font-semibold">
+          Customer intake link
+        </h2>
+        <p className="text-sm leading-6 text-neutral-700">
+          Send this link by text, WhatsApp, or email. Anyone with it can open
+          this intake, so share it only with the customer.
+        </p>
+      </div>
+
+      {usable ? (
+        <>
+          <input
+            readOnly
+            value={url}
+            aria-label="Intake link"
+            onFocus={(event) => event.currentTarget.select()}
+            className="h-10 w-full rounded-md border border-neutral-300 bg-neutral-50 px-3 font-mono text-sm"
+          />
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={copy} className={primaryButtonClassName}>
+              {copied ? "Copied" : "Copy link"}
+            </button>
+            {canShare ? (
+              <button type="button" onClick={share} className={secondaryButtonClassName}>
+                Share…
+              </button>
+            ) : null}
+            <Link
+              href={`/app/requests/${requestId}/preview`}
+              className={secondaryButtonClassName}
+            >
+              Preview
+            </Link>
+          </div>
+          <p className="text-sm text-neutral-600">Expires {expiresLabel}.</p>
+        </>
+      ) : (
+        <p className="text-sm text-neutral-800">
+          {expired
+            ? `This link expired ${expiresLabel}. Create a new one to send the customer.`
+            : "This request has no active link."}
+        </p>
+      )}
+
+      <p aria-live="polite" className="text-sm text-red-700">
+        {error}
+      </p>
+
+      <div>
+        <button
+          type="button"
+          onClick={regenerate}
+          disabled={regenerating}
+          className="text-sm underline disabled:opacity-60"
+        >
+          {regenerating ? "Creating new link…" : "Create a new link"}
+        </button>
+      </div>
+    </section>
+  );
+}
