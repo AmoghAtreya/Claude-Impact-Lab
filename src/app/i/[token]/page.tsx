@@ -18,6 +18,7 @@ type LinkRow = {
   business_email: string | null;
   business_phone: string | null;
   customer_name: string;
+  customer_description: string | null;
 };
 
 export default function IntakePage({ params }: PageProps<"/i/[token]">) {
@@ -52,7 +53,11 @@ async function Intake({ params }: Pick<PageProps<"/i/[token]">, "params">) {
           businessName={link.business_name}
           customerName={link.customer_name}
           businessPhone={link.business_phone}
-          live={{ token, photos: await getIntakePhotos(token) }}
+          live={{
+            token,
+            photos: await getIntakePhotos(token),
+            description: link.customer_description ?? "",
+          }}
         />
       );
     case "submitted":

@@ -15,7 +15,7 @@ export function IntakeWelcome({
   businessPhone?: string | null;
   embedded?: boolean;
   /** A real intake link: photos are uploaded and saved. Omit for previews. */
-  live?: { token: string; photos: IntakePhoto[] };
+  live?: { token: string; photos: IntakePhoto[]; description: string };
 }) {
   return (
     <IntakeWizard

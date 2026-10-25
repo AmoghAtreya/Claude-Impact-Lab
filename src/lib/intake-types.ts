@@ -2,17 +2,6 @@
 // The wizard only depends on these types, so swapping the demo analysis in
 // intake-demo.ts for real server actions doesn't change the UI.
 
-export type PhotoPrompt = {
-  id: string;
-  title: string;
-  hint: string;
-};
-
-export type PhotoReading = {
-  /** One short line confirming what was read, e.g. "Carrier 24ACC636 · 3-ton". */
-  summary: string;
-};
-
 export type IntakeQuestion = {
   id: string;
   /** Short label for the review screen and the service brief. */

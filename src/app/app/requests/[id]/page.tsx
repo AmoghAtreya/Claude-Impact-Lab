@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { statusClassName } from "@/app/ui/form-styles";
-import { HVAC_PHOTO_PROMPTS } from "@/lib/intake-demo";
 import { intakeUrl } from "@/lib/intake-links";
 import { listRequestPhotos, type RequestPhoto } from "@/lib/intake-photos";
 import {
@@ -150,9 +149,7 @@ function RequestPhotoGallery({ photos }: { photos: RequestPhoto[] }) {
   return (
     <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
       {photos.map((photo, index) => {
-        const label =
-          HVAC_PHOTO_PROMPTS.find((prompt) => prompt.id === photo.promptId)
-            ?.title ?? `Customer photo ${index + 1}`;
+        const label = photo.caption ?? `Customer photo ${index + 1}`;
         return (
           <li key={photo.id} className="space-y-1.5">
             <a

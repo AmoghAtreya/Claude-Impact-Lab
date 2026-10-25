@@ -1,25 +1,7 @@
-import type { IntakeAnalysis, PhotoPrompt, PhotoReading } from "@/lib/intake-types";
+import type { IntakeAnalysis } from "@/lib/intake-types";
 
 // Demo data for the HVAC "AC not cooling" scenario (docs/design).
-// TODO(ai): replace readPhoto/analyzeIntake with server actions that call Claude.
-
-export const HVAC_PHOTO_PROMPTS: PhotoPrompt[] = [
-  {
-    id: "outdoor-unit",
-    title: "The outdoor unit",
-    hint: "Stand back so the whole unit fits, with the label on its side in focus. Keep people out of the photo.",
-  },
-  {
-    id: "thermostat",
-    title: "Your thermostat screen",
-    hint: "Just the screen, so we can see the setting and the room temperature.",
-  },
-];
-
-const DEMO_READINGS: Record<string, PhotoReading> = {
-  "outdoor-unit": { summary: "Carrier outdoor unit · label found" },
-  thermostat: { summary: "Cool mode · set 72° · room 81°" },
-};
+// TODO(ai): replace analyzeIntake with a server action that calls Claude.
 
 const DEMO_ANALYSIS: IntakeAnalysis = {
   steps: [
@@ -65,11 +47,6 @@ const DEMO_ANALYSIS: IntakeAnalysis = {
 };
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-export async function readPhoto(promptId: string): Promise<PhotoReading> {
-  await wait(900);
-  return DEMO_READINGS[promptId] ?? { summary: "Photo received" };
-}
 
 export async function analyzeIntake(): Promise<IntakeAnalysis> {
   await wait(300);
