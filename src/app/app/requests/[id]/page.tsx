@@ -7,10 +7,13 @@ import { intakeUrl } from "@/lib/intake-links";
 import { listRequestPhotos } from "@/lib/intake-photos";
 import {
   getServiceRequest,
+  parseRequestListParams,
+  searchServiceRequests,
   INTAKE_STATUS_LABELS,
   requestReference,
 } from "@/lib/service-requests";
 import { tradeLabel } from "@/lib/trades";
+import { GroupedRequests } from "../request-cards";
 import { canManageWorkspace, requireWorkspace } from "@/lib/workspace";
 import { MarkReviewedButton } from "./brief-actions";
 import { BriefStatus, BriefTab, briefRefs, CustomerAnswersTab, DetailedAnalysisTab } from "./brief-panel";
@@ -22,14 +25,48 @@ export default function RequestPage({
   searchParams,
 }: PageProps<"/app/requests/[id]">) {
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 pb-10 pt-3 sm:px-6">
-      <Link href="/app/requests" className="inline-flex min-h-10 items-center self-start text-sm font-bold text-accent-strong">
-        ← Requests
-      </Link>
-      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
-        <RequestDetail params={params} searchParams={searchParams} />
-      </Suspense>
-    </main>
+    <div className="mx-auto max-w-3xl lg:grid lg:max-w-6xl lg:grid-cols-[21rem_1fr] lg:gap-6 lg:px-6">
+      {/* Desktop: the requests list beside the brief (CLAUDE.md UI conventions). */}
+      <aside aria-label="Requests" className="sticky top-16 hidden max-h-[calc(100dvh-4rem)] overflow-y-auto py-4 lg:block">
+        <Suspense fallback={null}>
+          <RequestsColumn params={params} />
+        </Suspense>
+      </aside>
+      <main className="flex min-w-0 flex-col gap-4 px-4 pb-10 pt-3 sm:px-6 lg:px-0">
+        <Link href="/app/requests" className="inline-flex min-h-10 items-center self-start text-sm font-bold text-accent-strong lg:hidden">
+          ← Requests
+        </Link>
+        <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
+          <RequestDetail params={params} searchParams={searchParams} />
+        </Suspense>
+      </main>
+    </div>
+  );
+}
+
+async function RequestsColumn({ params }: Pick<PageProps<"/app/requests/[id]">, "params">) {
+  const [{ id }, { workspace }] = await Promise.all([params, requireWorkspace()]);
+  const { requests } = await searchServiceRequests(workspace.id, parseRequestListParams({}));
+  const format = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: workspace.timezone });
+  return (
+    <>
+      <div className="mb-3 flex items-center justify-between">
+        <Link href="/app/requests" className="font-display text-lg font-bold">
+          Requests
+        </Link>
+        <Link href="/app/requests/new" className="text-sm font-bold text-accent-strong">
+          + New
+        </Link>
+      </div>
+      <GroupedRequests
+        requests={requests}
+        grouped
+        sort="created"
+        compact
+        selectedId={id}
+        format={(iso) => format.format(new Date(iso))}
+      />
+    </>
   );
 }
 
@@ -89,7 +126,7 @@ async function RequestDetail({
 
   return (
     <>
-      <header className="sticky top-16 z-10 -mx-4 border-b border-line bg-page px-4 pb-3 pt-1 sm:-mx-6 sm:px-6">
+      <header className="sticky top-16 z-10 -mx-4 border-b border-line bg-page px-4 pb-3 pt-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
         <div className="flex items-start justify-between gap-3">
           <h1 className="font-display text-[26px] font-extrabold leading-tight">
             {request.customerName}{" "}
@@ -219,7 +256,7 @@ async function RequestDetail({
       </details>
 
       {intake.brief ? (
-        <div className="sticky bottom-0 -mx-4 mt-2 border-t border-line bg-page px-4 pb-4 pt-3 sm:-mx-6 sm:px-6">
+        <div className="sticky bottom-0 -mx-4 mt-2 border-t border-line bg-page px-4 pb-4 pt-3 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
           <div className="flex gap-2">
             {request.customerPhone ? (
               <a

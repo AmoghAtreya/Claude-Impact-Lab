@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { logout } from "@/app/auth/actions";
 import { Logo } from "@/app/ui/logo";
+import { AppTabs } from "./app-tabs";
 import { getAvatarUrl } from "@/lib/avatar";
 import { requireWorkspace } from "@/lib/workspace";
 
@@ -12,12 +13,12 @@ export default function PortalLayout({ children }: LayoutProps<"/app">) {
   return (
     <div className="min-h-dvh bg-page text-ink">
       <header className="sticky top-0 z-20 border-b border-line bg-white">
-        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-4 px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-3xl items-center lg:max-w-6xl justify-between gap-4 px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-5">
             <Link href="/app/requests" aria-label="OneTrip requests" className="shrink-0">
               <Logo />
             </Link>
-            <nav aria-label="Main" className="flex items-center gap-1 text-[15px] font-semibold">
+            <nav aria-label="Main" className="hidden items-center gap-1 text-[15px] font-semibold sm:flex">
               <Link href="/app/requests" className="rounded-lg px-2.5 py-2 hover:bg-chip">
                 Requests
               </Link>
@@ -38,7 +39,8 @@ export default function PortalLayout({ children }: LayoutProps<"/app">) {
           </div>
         </div>
       </header>
-      {children}
+      <div className="pb-20 sm:pb-0">{children}</div>
+      <AppTabs />
     </div>
   );
 }

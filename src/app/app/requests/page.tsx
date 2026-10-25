@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { primaryButtonClassName, statusClassName } from "@/app/ui/form-styles";
 import {
-  ANALYSIS_STATUS_LABELS,
   hasActiveFilters,
   INTAKE_STATUS_LABELS,
   parseRequestListParams,
@@ -11,14 +10,11 @@ import {
   REQUESTS_PAGE_SIZE,
   requestReference,
   REVIEW_FILTERS,
-  REVIEW_STATUS_LABELS,
   searchServiceRequests,
-  type AnalysisStatus,
-  type IntakeStatus,
-  type ListedServiceRequest,
   type RequestListParams,
 } from "@/lib/service-requests";
 import { requireWorkspace } from "@/lib/workspace";
+import { GroupedRequests } from "./request-cards";
 import { RequestFilters } from "./request-filters";
 
 export default function RequestsPage({
@@ -133,96 +129,18 @@ async function RequestList({
           </Link>
         </div>
       ) : (
-        <ul className="flex flex-col gap-2.5">
-          {requests.map((request) => (
-            <RequestRow
-              key={request.id}
-              request={request}
-              sort={params.sort}
-              format={(iso) => formatDateTime.format(new Date(iso))}
-            />
-          ))}
-        </ul>
+        <GroupedRequests
+          requests={requests}
+          grouped={!filtered && params.sort === "created"}
+          sort={params.sort}
+          format={(iso) => formatDateTime.format(new Date(iso))}
+        />
       )}
 
       {pageCount > 1 ? (
         <Pagination params={params} pageCount={pageCount} />
       ) : null}
     </div>
-  );
-}
-
-// Status pills: grey = waiting, green = ready, red only for failures.
-const INTAKE_TONES: Record<IntakeStatus, string> = {
-  draft: "bg-wait-soft text-wait",
-  shared: "bg-wait-soft text-wait",
-  in_progress: "bg-accent-soft text-accent-strong",
-  submitted: "bg-ok-soft text-ok",
-};
-
-const ANALYSIS_TONES: Record<AnalysisStatus, string> = {
-  not_started: "bg-wait-soft text-wait",
-  pending: "bg-wait-soft text-wait",
-  running: "bg-accent-soft text-accent-strong",
-  succeeded: "bg-ok-soft text-ok",
-  failed: "bg-danger-soft text-danger",
-};
-
-const pillClassName = "rounded-lg px-2 py-0.5 text-xs font-bold";
-
-function RequestRow({
-  request,
-  sort,
-  format,
-}: {
-  request: ListedServiceRequest;
-  sort: RequestListParams["sort"];
-  format: (iso: string) => string;
-}) {
-  // Show the timestamp the list is sorted by.
-  const sortedTime =
-    sort === "activity"
-      ? `Active ${format(request.lastActivityAt)}`
-      : sort === "submitted"
-        ? request.submittedAt
-          ? `Submitted ${format(request.submittedAt)}`
-          : "Not submitted"
-        : `Created ${format(request.createdAt)}`;
-  // Analysis only means something once the customer has submitted.
-  const showAnalysis = request.intakeStatus === "submitted";
-
-  return (
-    <li>
-      <Link
-        href={`/app/requests/${request.id}`}
-        className="flex min-h-[84px] flex-col gap-1.5 rounded-2xl border-[1.5px] border-line bg-white p-4 hover:border-ink"
-      >
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="truncate font-bold">
-            {request.customerName}{" "}
-            <span className="font-normal text-muted">{requestReference(request.number)}</span>
-          </p>
-          <span className="shrink-0 text-xs text-muted">{sortedTime}</span>
-        </div>
-        <p className="truncate text-sm text-muted">{request.serviceAddress ?? "No address yet"}</p>
-        <div className="flex flex-wrap gap-1.5 pt-0.5">
-          {showAnalysis ? (
-            <span className={`${pillClassName} ${ANALYSIS_TONES[request.analysisStatus]}`}>
-              {ANALYSIS_STATUS_LABELS[request.analysisStatus]}
-            </span>
-          ) : (
-            <span className={`${pillClassName} ${INTAKE_TONES[request.intakeStatus]}`}>
-              {INTAKE_STATUS_LABELS[request.intakeStatus]}
-            </span>
-          )}
-          {request.reviewStatus !== "unreviewed" ? (
-            <span className={`${pillClassName} bg-chip text-ink`}>
-              {REVIEW_STATUS_LABELS[request.reviewStatus]}
-            </span>
-          ) : null}
-        </div>
-      </Link>
-    </li>
   );
 }
 
