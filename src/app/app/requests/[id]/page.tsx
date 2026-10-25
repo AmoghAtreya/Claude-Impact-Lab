@@ -21,7 +21,7 @@ export default function RequestPage({
   searchParams,
 }: PageProps<"/app/requests/[id]">) {
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6">
+    <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 pb-10 pt-3 sm:px-6">
       <Link href="/app/requests" className="inline-flex min-h-10 items-center self-start text-sm font-bold text-accent-strong">
         ← Requests
       </Link>
@@ -58,6 +58,14 @@ async function RequestDetail({
     getRequestIntake(workspace.id, request.id),
   ]);
 
+  const quickActions = [
+    request.customerPhone ? ["📞 Call", `tel:${request.customerPhone}`] : null,
+    request.customerPhone ? ["💬 Text", `sms:${request.customerPhone}`] : null,
+    request.serviceAddress
+      ? ["🧭 Directions", `https://maps.google.com/?q=${encodeURIComponent(request.serviceAddress)}`]
+      : null,
+  ].filter((a): a is string[] => a !== null);
+
   const details: [string, string | null][] = [
     ["Phone", request.customerPhone],
     ["Email", request.customerEmail],
@@ -68,19 +76,38 @@ async function RequestDetail({
 
   return (
     <>
-      <div className="space-y-1">
-        <h1 className="font-display text-[28px] font-extrabold tracking-tight">
-          {request.customerName}{" "}
-          <span className="font-normal text-muted">
-            {requestReference(request.number)}
+      <header className="sticky top-16 z-10 -mx-4 border-b border-line bg-page px-4 pb-3 pt-1 sm:-mx-6 sm:px-6">
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="font-display text-[26px] font-extrabold leading-tight">
+            {request.customerName}{" "}
+            <span className="font-normal text-muted">{requestReference(request.number)}</span>
+          </h1>
+          <span
+            className={`mt-1.5 shrink-0 rounded-lg px-2 py-1 text-xs font-bold ${
+              request.intakeStatus === "submitted" ? "bg-ok-soft text-ok" : "bg-wait-soft text-wait"
+            }`}
+          >
+            {request.reviewStatus === "archived" ? "Archived" : INTAKE_STATUS_LABELS[request.intakeStatus]}
           </span>
-        </h1>
-        <p className="text-sm text-muted">
-          {request.reviewStatus === "archived" ? "Archived · " : null}
-          {INTAKE_STATUS_LABELS[request.intakeStatus]} · Created{" "}
-          {formatDateTime.format(new Date(request.createdAt))}
+        </div>
+        <p className="truncate text-sm text-muted">
+          {[request.serviceAddress, request.issueDescription?.split("\n")[0]].filter(Boolean).join(" · ") ||
+            `Created ${formatDateTime.format(new Date(request.createdAt))}`}
         </p>
-      </div>
+        {quickActions.length ? (
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            {quickActions.map(([label, href]) => (
+              <a
+                key={label}
+                href={href}
+                className="grid min-h-12 place-items-center rounded-xl border-[1.5px] border-line bg-white text-sm font-bold"
+              >
+                {label}
+              </a>
+            ))}
+          </div>
+        ) : null}
+      </header>
 
       {created ? (
         <p role="status" className={statusClassName}>
@@ -97,7 +124,8 @@ async function RequestDetail({
         requestId={request.id}
         intakeStatus={request.intakeStatus}
         intake={intake}
-        photoIds={photos.map((photo) => photo.id)}
+        photos={photos}
+        customerName={request.customerName}
         formatDateTime={(iso) => formatDateTime.format(new Date(iso))}
       />
 
@@ -152,7 +180,11 @@ async function RequestDetail({
             </p>
           </div>
         ) : null}
-        <RequestPhotoGallery photos={photos} />
+        {intake.brief && photos.length ? (
+          <p className="text-sm text-muted">The photos are in the brief above. Tap one to see it full size.</p>
+        ) : (
+          <RequestPhotoGallery photos={photos} />
+        )}
       </section>
 
       <ManageRequestPanel
