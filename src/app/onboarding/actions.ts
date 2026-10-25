@@ -1,12 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { processAvatar, saveAvatar } from "@/lib/avatar";
 import { getCurrentWorkspace } from "@/lib/workspace";
+import { workspaceDetailsSchema } from "@/lib/workspace-schema";
 import { createClient } from "@/lib/supabase/server";
-import { TRADE_OTHER_MAX_LENGTH, TRADES, type Trade } from "@/lib/trades";
-import { PHONE_PATTERN, PHONE_PATTERN_MESSAGE } from "@/lib/validation";
 
 export type OnboardingField =
   | "avatar"
@@ -22,55 +20,6 @@ export type OnboardingFormState = {
   fieldErrors?: Partial<Record<OnboardingField, string>>;
   values?: Partial<Record<OnboardingField, string>>;
 };
-
-function isValidTimeZone(timeZone: string) {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const tradeValues = TRADES.map((trade) => trade.value) as [Trade, ...Trade[]];
-
-const workspaceSchema = z
-  .object({
-    name: z
-      .string()
-      .trim()
-      .min(1, { error: "Enter your business name." })
-      .max(120, { error: "Keep the business name under 120 characters." }),
-    trade: z.enum(tradeValues, { error: "Choose your trade." }),
-    tradeOther: z
-      .string()
-      .trim()
-      .max(TRADE_OTHER_MAX_LENGTH, {
-        error: `Keep your trade under ${TRADE_OTHER_MAX_LENGTH} characters.`,
-      }),
-    contactEmail: z
-      .string()
-      .trim()
-      .pipe(z.email({ error: "Enter a valid email address." })),
-    contactPhone: z
-      .string()
-      .trim()
-      .max(40, { error: "Enter a shorter phone number." })
-      .regex(PHONE_PATTERN, { error: PHONE_PATTERN_MESSAGE }),
-    timezone: z
-      .string()
-      .min(1, { error: "Choose your timezone." })
-      .refine(isValidTimeZone, { error: "Choose a valid timezone." }),
-  })
-  .refine((data) => data.trade !== "other" || data.tradeOther.length > 0, {
-    error: "Enter your trade.",
-    path: ["tradeOther"],
-    // Run even when other fields are invalid, so all errors show at once.
-    when: (payload) =>
-      !payload.issues.some((issue) =>
-        ["trade", "tradeOther"].includes(String(issue.path?.[0])),
-      ),
-  });
 
 export async function createWorkspace(
   _prevState: OnboardingFormState,
@@ -96,7 +45,7 @@ export async function createWorkspace(
       ? await processAvatar(avatarFile)
       : null;
 
-  const parsed = workspaceSchema.safeParse(values);
+  const parsed = workspaceDetailsSchema.safeParse(values);
   if (!parsed.success || (avatar && !avatar.ok)) {
     const fieldErrors: OnboardingFormState["fieldErrors"] = {};
     for (const issue of parsed.error?.issues ?? []) {

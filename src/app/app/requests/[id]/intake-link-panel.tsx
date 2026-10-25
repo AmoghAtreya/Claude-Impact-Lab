@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useSyncExternalStore, useTransition } from "react";
 import { primaryButtonClassName } from "@/app/ui/form-styles";
-import { markIntakeLinkShared, regenerateIntakeLink } from "../actions";
+import { markIntakeLinkShared, regenerateIntakeLink, revokeIntakeLink } from "../actions";
 
 type IntakeLinkPanelProps = {
   requestId: string;
@@ -32,6 +32,7 @@ export function IntakeLinkPanel({
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [regenerating, startRegenerate] = useTransition();
+  const [revoking, startRevoke] = useTransition();
   // The Web Share API only exists in some browsers; false during SSR.
   const canShare = useSyncExternalStore(
     subscribeNoop,
@@ -79,6 +80,21 @@ export function IntakeLinkPanel({
     setError(null);
     startRegenerate(async () => {
       const result = await regenerateIntakeLink(requestId);
+      if (result.error) setError(result.error);
+    });
+  }
+
+  function revoke() {
+    if (
+      !window.confirm(
+        "Revoke this link? It will stop working for the customer. Photos and answers already sent are kept.",
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    startRevoke(async () => {
+      const result = await revokeIntakeLink(requestId);
       if (result.error) setError(result.error);
     });
   }
@@ -137,15 +153,25 @@ export function IntakeLinkPanel({
         {error}
       </p>
 
-      <div>
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
         <button
           type="button"
           onClick={regenerate}
-          disabled={regenerating}
+          disabled={regenerating || revoking}
           className="text-sm underline disabled:opacity-60"
         >
           {regenerating ? "Creating new link…" : "Create a new link"}
         </button>
+        {usable ? (
+          <button
+            type="button"
+            onClick={revoke}
+            disabled={regenerating || revoking}
+            className="text-sm text-red-700 underline disabled:opacity-60"
+          >
+            {revoking ? "Revoking…" : "Revoke link"}
+          </button>
+        ) : null}
       </div>
     </section>
   );

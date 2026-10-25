@@ -61,6 +61,20 @@ export async function saveAvatar(userId: string, data: Buffer) {
   return { ok: !profileError };
 }
 
+export async function removeAvatar(userId: string) {
+  const supabase = await createClient();
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .upsert({ id: userId, avatar_path: null });
+  if (profileError) {
+    return { ok: false as const };
+  }
+  // The profile no longer points at the file, so a failure here only
+  // leaves an unused object behind.
+  await supabase.storage.from(AVATAR_BUCKET).remove([`${userId}/avatar.webp`]);
+  return { ok: true as const };
+}
+
 // A short-lived URL for the user's avatar, or null if they don't have one.
 export async function getAvatarUrl(userId: string) {
   const supabase = await createClient();

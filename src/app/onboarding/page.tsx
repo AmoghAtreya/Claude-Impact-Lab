@@ -2,13 +2,8 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { logout } from "@/app/auth/actions";
 import { getCurrentWorkspace } from "@/lib/workspace";
+import { TIME_ZONES } from "@/lib/workspace-schema";
 import { OnboardingForm } from "./onboarding-form";
-
-// Computed on the server and passed down so the server and browser render
-// the same list.
-const TIME_ZONES = Array.from(
-  new Set(["UTC", ...Intl.supportedValuesOf("timeZone")]),
-);
 
 export default function OnboardingPage() {
   return (
