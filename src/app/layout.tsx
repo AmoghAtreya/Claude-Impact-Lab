@@ -18,11 +18,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
+    // suppressHydrationWarning: browser extensions (Grammarly, Dark Reader…)
+    // add attributes to <html>/<body> before React hydrates. Only silences
+    // these two elements, not their children.
     <html
       lang="en"
       className={`${inter.variable} ${archivo.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
     >
-      <body className="bg-white font-sans text-neutral-950 antialiased">{children}</body>
+      <body className="bg-white font-sans text-neutral-950 antialiased" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }
