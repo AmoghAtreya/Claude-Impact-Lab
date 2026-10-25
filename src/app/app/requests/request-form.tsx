@@ -19,26 +19,45 @@ import {
   tradeLabel,
   type Trade,
 } from "@/lib/trades";
-import {
-  createServiceRequest,
-  type RequestField,
-  type RequestFormState,
-} from "../actions";
+import type { RequestField, RequestFormState } from "./actions";
 
-type NewRequestFormProps = {
-  defaultTrade: Trade;
-  defaultTradeOther: string | null;
+export type RequestFormValues = {
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  serviceAddress: string;
+  trade: Trade;
+  tradeOther: string;
+  issueDescription: string;
 };
 
-export function NewRequestForm({
-  defaultTrade,
-  defaultTradeOther,
-}: NewRequestFormProps) {
+type RequestFormProps = {
+  action: (
+    state: RequestFormState,
+    formData: FormData,
+  ) => Promise<RequestFormState>;
+  initialValues: RequestFormValues;
+  // The workspace's trade, shown as a hint when creating a request.
+  workspaceTrade?: { trade: Trade; tradeOther: string | null };
+  submitLabel: string;
+  pendingLabel: string;
+  cancelHref: string;
+};
+
+// Shared by "New request" and "Edit request" so both stay in sync.
+export function RequestForm({
+  action,
+  initialValues,
+  workspaceTrade,
+  submitLabel,
+  pendingLabel,
+  cancelHref,
+}: RequestFormProps) {
   const [state, formAction, pending] = useActionState<
     RequestFormState,
     FormData
-  >(createServiceRequest, {});
-  const [trade, setTrade] = useState<string>(defaultTrade);
+  >(action, {});
+  const [trade, setTrade] = useState<string>(initialValues.trade);
 
   // Submitting manually skips React's automatic form reset, so a failed
   // submit keeps everything the contractor typed.
@@ -81,6 +100,7 @@ export function NewRequestForm({
           <input
             {...fieldProps("customerName")}
             type="text"
+            defaultValue={initialValues.customerName}
             autoComplete="off"
             required
             maxLength={120}
@@ -96,6 +116,7 @@ export function NewRequestForm({
             <input
               {...fieldProps("customerPhone")}
               type="tel"
+              defaultValue={initialValues.customerPhone}
               autoComplete="off"
               maxLength={40}
               className={inputClassName}
@@ -109,6 +130,7 @@ export function NewRequestForm({
             <input
               {...fieldProps("customerEmail")}
               type="email"
+              defaultValue={initialValues.customerEmail}
               autoComplete="off"
               maxLength={254}
               className={inputClassName}
@@ -122,6 +144,7 @@ export function NewRequestForm({
           </label>
           <textarea
             {...fieldProps("serviceAddress")}
+            defaultValue={initialValues.serviceAddress}
             rows={2}
             maxLength={300}
             className={`${inputClassName} h-auto py-2`}
@@ -137,7 +160,7 @@ export function NewRequestForm({
             Trade
           </label>
           {/* Controlled so browser form restoration can't override the
-              workspace default. */}
+              initial trade. */}
           <select
             {...fieldProps("trade")}
             value={trade}
@@ -151,10 +174,12 @@ export function NewRequestForm({
               </option>
             ))}
           </select>
-          <p className="text-sm text-neutral-500">
-            Defaults to your business&apos;s trade:{" "}
-            {tradeLabel(defaultTrade, defaultTradeOther)}.
-          </p>
+          {workspaceTrade ? (
+            <p className="text-sm text-neutral-500">
+              Defaults to your business&apos;s trade:{" "}
+              {tradeLabel(workspaceTrade.trade, workspaceTrade.tradeOther)}.
+            </p>
+          ) : null}
           {fieldError("trade")}
         </div>
         {trade === "other" ? (
@@ -167,7 +192,7 @@ export function NewRequestForm({
               type="text"
               required
               maxLength={TRADE_OTHER_MAX_LENGTH}
-              defaultValue={defaultTradeOther ?? ""}
+              defaultValue={initialValues.tradeOther}
               className={inputClassName}
             />
             {fieldError("tradeOther")}
@@ -179,6 +204,7 @@ export function NewRequestForm({
           </label>
           <textarea
             {...fieldProps("issueDescription")}
+            defaultValue={initialValues.issueDescription}
             required
             rows={4}
             maxLength={2000}
@@ -204,9 +230,9 @@ export function NewRequestForm({
           disabled={pending}
           className={primaryButtonClassName}
         >
-          {pending ? "Creating…" : "Create request and link"}
+          {pending ? pendingLabel : submitLabel}
         </button>
-        <Link href="/app/requests" className="text-sm underline">
+        <Link href={cancelHref} className="text-sm underline">
           Cancel
         </Link>
       </div>

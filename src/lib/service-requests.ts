@@ -31,6 +31,7 @@ export type ServiceRequest = ServiceRequestSummary & {
   trade: Trade;
   tradeOther: string | null;
   issueDescription: string | null;
+  updatedAt: string;
   activeLink: { id: string; expiresAt: string; expired: boolean } | null;
 };
 
@@ -46,6 +47,7 @@ type RequestRow = {
   issue_description: string | null;
   intake_status: IntakeStatus;
   created_at: string;
+  updated_at: string;
   intake_links: { id: string; expires_at: string; revoked_at: string | null }[];
 };
 
@@ -203,7 +205,7 @@ export async function getServiceRequest(
   const { data, error } = await supabase
     .from("service_requests")
     .select(
-      "id, number, customer_name, customer_phone, customer_email, service_address, trade, trade_other, issue_description, intake_status, created_at, intake_links (id, expires_at, revoked_at)",
+      "id, number, customer_name, customer_phone, customer_email, service_address, trade, trade_other, issue_description, intake_status, created_at, updated_at, intake_links (id, expires_at, revoked_at)",
     )
     .eq("organization_id", organizationId)
     .eq("id", requestId)
@@ -229,6 +231,7 @@ export async function getServiceRequest(
     issueDescription: data.issue_description,
     intakeStatus: data.intake_status,
     createdAt: data.created_at,
+    updatedAt: data.updated_at,
     activeLink: active
       ? {
           id: active.id,

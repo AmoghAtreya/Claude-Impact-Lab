@@ -32,7 +32,10 @@ async function RequestDetail({
   params,
   searchParams,
 }: Pick<PageProps<"/app/requests/[id]">, "params" | "searchParams">) {
-  const [{ id }, { created }] = await Promise.all([params, searchParams]);
+  const [{ id }, { created, updated }] = await Promise.all([
+    params,
+    searchParams,
+  ]);
   const { workspace } = await requireWorkspace();
   const request = await getServiceRequest(workspace.id, id);
   if (!request) {
@@ -75,6 +78,10 @@ async function RequestDetail({
           Request created. Copy or share the link below to send it to{" "}
           {request.customerName}.
         </p>
+      ) : updated ? (
+        <p role="status" className={statusClassName}>
+          Changes saved.
+        </p>
       ) : null}
 
       <IntakeLinkPanel
@@ -87,7 +94,15 @@ async function RequestDetail({
       />
 
       <section className="rounded-lg border border-neutral-200 bg-white p-5 sm:p-6">
-        <h2 className="mb-4 text-base font-semibold">Details</h2>
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <h2 className="text-base font-semibold">Details</h2>
+          <Link
+            href={`/app/requests/${request.id}/edit`}
+            className="inline-flex h-9 items-center rounded-md border border-neutral-300 bg-white px-3 text-sm font-medium"
+          >
+            Edit
+          </Link>
+        </div>
         <dl className="grid gap-4 sm:grid-cols-[10rem_1fr]">
           {details.map(([label, value]) => (
             <div key={label} className="contents">
