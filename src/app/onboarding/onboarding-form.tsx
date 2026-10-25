@@ -1,13 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import {
   fieldErrorClassName,
   inputClassName,
   labelClassName,
   primaryButtonClassName,
 } from "@/app/ui/form-styles";
-import { TRADES } from "@/lib/trades";
+import { TRADE_OTHER_MAX_LENGTH, TRADES } from "@/lib/trades";
 import {
   createWorkspace,
   type OnboardingField,
@@ -25,6 +25,7 @@ export function OnboardingForm({ defaultEmail, timeZones }: OnboardingFormProps)
     FormData
   >(createWorkspace, {});
   const timeZoneRef = useRef<HTMLSelectElement>(null);
+  const [trade, setTrade] = useState(state.values?.trade ?? TRADES[0].value);
 
   // Preselect the browser's timezone. Done after hydration because the
   // server can't know it.
@@ -76,6 +77,7 @@ export function OnboardingForm({ defaultEmail, timeZones }: OnboardingFormProps)
           name="trade"
           required
           defaultValue={values.trade ?? TRADES[0].value}
+          onChange={(event) => setTrade(event.target.value)}
           aria-invalid={Boolean(state.fieldErrors?.trade)}
           aria-describedby={describedBy("trade")}
           className={inputClassName}
@@ -88,6 +90,27 @@ export function OnboardingForm({ defaultEmail, timeZones }: OnboardingFormProps)
         </select>
         {fieldError("trade")}
       </div>
+
+      {trade === "other" ? (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="tradeOther" className={labelClassName}>
+            Your trade
+          </label>
+          <input
+            id="tradeOther"
+            name="tradeOther"
+            type="text"
+            required
+            maxLength={TRADE_OTHER_MAX_LENGTH}
+            placeholder="e.g. Chimney sweeping"
+            defaultValue={values.tradeOther}
+            aria-invalid={Boolean(state.fieldErrors?.tradeOther)}
+            aria-describedby={describedBy("tradeOther")}
+            className={inputClassName}
+          />
+          {fieldError("tradeOther")}
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="contactEmail" className={labelClassName}>

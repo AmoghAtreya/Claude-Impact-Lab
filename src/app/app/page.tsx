@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { logout } from "@/app/auth/actions";
-import { TRADES } from "@/lib/trades";
+import { tradeLabel } from "@/lib/trades";
 import { requireWorkspace } from "@/lib/workspace";
 
 export default function LoggedInPage() {
@@ -25,7 +25,7 @@ export default function LoggedInPage() {
 
 async function WorkspaceSummary() {
   const { user, workspace } = await requireWorkspace();
-  const trade = TRADES.find((t) => t.value === workspace.trade)?.label;
+  const trade = tradeLabel(workspace.trade, workspace.tradeOther);
   return (
     <>
       <h1 className="text-3xl font-semibold tracking-tight">

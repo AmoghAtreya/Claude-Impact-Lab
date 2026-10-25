@@ -11,6 +11,7 @@ export type Workspace = {
   id: string;
   name: string;
   trade: Trade;
+  tradeOther: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
   timezone: string;
@@ -23,6 +24,7 @@ type MembershipRow = {
     id: string;
     name: string;
     trade: Trade;
+    trade_other: string | null;
     contact_email: string | null;
     contact_phone: string | null;
     timezone: string;
@@ -38,7 +40,7 @@ export const getCurrentWorkspace = cache(
     const { data, error } = await supabase
       .from("organization_members")
       .select(
-        "role, organizations (id, name, trade, contact_email, contact_phone, timezone)",
+        "role, organizations (id, name, trade, trade_other, contact_email, contact_phone, timezone)",
       )
       .eq("user_id", user.id)
       .order("created_at")
@@ -60,6 +62,7 @@ export const getCurrentWorkspace = cache(
         id: org.id,
         name: org.name,
         trade: org.trade,
+        tradeOther: org.trade_other,
         contactEmail: org.contact_email,
         contactPhone: org.contact_phone,
         timezone: org.timezone,
