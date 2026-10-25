@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { getOptionalUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
 export type AuthFormState = {
@@ -17,6 +18,10 @@ function readCredentials(formData: FormData) {
     email: String(formData.get("email") ?? "").trim(),
     password: String(formData.get("password") ?? ""),
   };
+}
+
+async function getOrigin() {
+  return (await headers()).get("origin");
 }
 
 export async function login(
@@ -59,12 +64,11 @@ export async function signup(
     };
   }
 
-  const origin = (await headers()).get("origin");
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: `${origin}/auth/confirm?next=/app` },
+    options: { emailRedirectTo: `${await getOrigin()}/auth/confirm?next=/app` },
   });
 
   if (error) {
@@ -77,6 +81,70 @@ export async function signup(
     return {
       message: `We sent a confirmation link to ${email}. Open it to finish creating your account.`,
     };
+  }
+
+  redirect("/app");
+}
+
+export async function requestPasswordReset(
+  _prevState: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) {
+    return { error: "Enter your email." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${await getOrigin()}/auth/confirm?next=/reset-password`,
+  });
+
+  if (error?.status === 429) {
+    return {
+      error: "Too many reset requests. Wait a few minutes and try again.",
+      email,
+    };
+  }
+
+  // Same response whether or not the account exists, so the form can't be
+  // used to discover registered emails.
+  return {
+    message: `If an account exists for ${email}, we sent a link to reset your password.`,
+  };
+}
+
+export async function updatePassword(
+  _prevState: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  // The reset link signs the user in, so a session is required here.
+  const user = await getOptionalUser();
+  if (!user) {
+    return {
+      error: "Your reset link has expired. Request a new one to continue.",
+    };
+  }
+
+  const password = String(formData.get("password") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return {
+      error: `Use at least ${MIN_PASSWORD_LENGTH} characters for your password.`,
+    };
+  }
+  if (password !== confirmPassword) {
+    return { error: "The passwords don't match." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    if (error.code === "same_password") {
+      return { error: "Choose a password different from your current one." };
+    }
+    return { error: error.message };
   }
 
   redirect("/app");

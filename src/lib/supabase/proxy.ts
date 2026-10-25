@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const AUTH_PAGES = ["/login", "/signup"];
+const PROTECTED_PREFIXES = ["/app", "/onboarding"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -37,7 +38,10 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Optimistic redirects only; pages and actions still verify the user.
-  if (!signedIn && pathname.startsWith("/app")) {
+  const isProtected = PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+  if (!signedIn && isProtected) {
     return redirectWithCookies(request, response, "/login");
   }
   if (signedIn && AUTH_PAGES.includes(pathname)) {

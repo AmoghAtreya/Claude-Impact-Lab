@@ -10,12 +10,17 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
       <Suspense>
         <LoginForm searchParams={searchParams} />
       </Suspense>
-      <p className="text-sm text-neutral-700">
-        New here?{" "}
-        <Link href="/signup" className="underline">
-          Create an account
+      <div className="flex flex-col gap-2 text-sm text-neutral-700">
+        <Link href="/forgot-password" className="underline">
+          Forgot your password?
         </Link>
-      </p>
+        <p>
+          New here?{" "}
+          <Link href="/signup" className="underline">
+            Create an account
+          </Link>
+        </p>
+      </div>
     </main>
   );
 }

@@ -1,6 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
+import {
+  fieldErrorClassName,
+  inputClassName,
+  labelClassName,
+  primaryButtonClassName,
+  statusClassName,
+} from "@/app/ui/form-styles";
 import type { AuthFormState } from "./actions";
 
 type AuthFormProps = {
@@ -24,10 +31,7 @@ export function AuthForm({
 
   if (state.message) {
     return (
-      <p
-        role="status"
-        className="rounded-md border border-neutral-200 bg-neutral-50 p-4 text-sm leading-6 text-neutral-800"
-      >
+      <p role="status" className={statusClassName}>
         {state.message}
       </p>
     );
@@ -36,7 +40,7 @@ export function AuthForm({
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="email" className="text-sm font-medium">
+        <label htmlFor="email" className={labelClassName}>
           Email
         </label>
         <input
@@ -46,11 +50,11 @@ export function AuthForm({
           autoComplete="email"
           required
           defaultValue={state.email}
-          className="h-10 rounded-md border border-neutral-300 px-3 text-base focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/10"
+          className={inputClassName}
         />
       </div>
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="password" className="text-sm font-medium">
+        <label htmlFor="password" className={labelClassName}>
           Password
         </label>
         <input
@@ -59,18 +63,18 @@ export function AuthForm({
           type="password"
           autoComplete={passwordAutoComplete}
           required
-          className="h-10 rounded-md border border-neutral-300 px-3 text-base focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/10"
+          className={inputClassName}
         />
       </div>
       {state.error ? (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className={fieldErrorClassName}>
           {state.error}
         </p>
       ) : null}
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex h-10 items-center justify-center rounded-md bg-neutral-900 px-4 text-sm font-medium text-white disabled:opacity-60"
+        className={primaryButtonClassName}
       >
         {pending ? pendingLabel : submitLabel}
       </button>
