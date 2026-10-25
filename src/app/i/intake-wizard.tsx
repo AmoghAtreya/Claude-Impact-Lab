@@ -135,23 +135,44 @@ export function IntakeWizard({
   const view = analysis.status === "ready" && !skipQuestions ? analysis.view : EMPTY_ANALYSIS;
   const questions = view.questions;
 
-  // The AI looks at whatever was sent each time the customer reaches this
-  // screen. Unchanged photos reuse the stored result on the server, so going
-  // back and forth doesn't repeat the work or change the questions.
+  // The AI looks at whatever was sent. It starts as soon as the photos finish
+  // saving (CLAUDE.md: analyze while the customer continues), keyed by the
+  // saved photo set; unchanged photos reuse the stored result on the server,
+  // so going back and forth doesn't repeat the work or change the questions.
+  const photoSetKey = photos.map((p) => (p.upload.status === "saved" ? p.upload.id : p.key)).sort().join(",");
+  const startedKey = useRef<string | null>(null);
+  const [analysisStartedAt, setAnalysisStartedAt] = useState(0);
+
   async function runAnalysis() {
+    const key = photoSetKey;
+    startedKey.current = key;
+    setAnalysisStartedAt(Date.now());
     setAnalysis({ status: "loading" });
     setSkipQuestions(false);
     if (!live) {
-      setAnalysis({ status: "ready", view: await demoAnalysis() });
+      const view = await demoAnalysis();
+      if (startedKey.current === key) setAnalysis({ status: "ready", view });
       return;
     }
     const result = await analyzeIntakeAction(live.token);
+    // A newer photo set started its own analysis; ignore this one.
+    if (startedKey.current !== key) return;
     setAnalysis(result.ok ? { status: "ready", view: result.analysis } : { status: "failed", error: result.error });
   }
 
+  // Start reading a moment after the last photo saves, while the customer
+  // is still on the photo screen.
+  useEffect(() => {
+    if (step.kind !== "photos" || !canContinue || startedKey.current === photoSetKey) return;
+    const timer = setTimeout(() => void runAnalysis(), 1500);
+    return () => clearTimeout(timer);
+    // runAnalysis reads the latest state; re-run only when the inputs change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step.kind, canContinue, photoSetKey]);
+
   function goToReading() {
     setStep({ kind: "reading" });
-    void runAnalysis();
+    if (startedKey.current !== photoSetKey || analysis.status === "failed") void runAnalysis();
   }
 
   function afterReading() {
@@ -396,6 +417,17 @@ export function IntakeWizard({
         <p className="mb-3 mt-1 text-[15px] text-muted">These help most. Don’t open covers.</p>
         <PhotoChecklist count={photos.length} />
 
+        {photos.length === 0 ? (
+          <figure className="relative mt-4 overflow-hidden rounded-2xl border border-line">
+            {/* eslint-disable-next-line @next/next/no-img-element -- static example */}
+            <img src="/landing/ac-condenser.jpg" alt="Example: a whole outdoor AC unit in frame" className="aspect-[4/3] w-full object-cover" />
+            <span className="absolute left-2.5 top-2.5 rounded-lg bg-black/70 px-2 py-1 text-xs font-bold text-white">Like this</span>
+            <figcaption className="bg-white px-3 py-2 text-sm text-muted">
+              The whole thing in frame, from a few steps back. Photo: Tony Webster, CC BY 4.0
+            </figcaption>
+          </figure>
+        ) : null}
+
         {photos.length > 0 ? (
           <ul className="mt-4 flex flex-col gap-3">
             {photos.map((photo, index) => (
@@ -479,11 +511,8 @@ export function IntakeWizard({
           <h1 className="mt-2 font-display text-2xl font-bold">
             {savedCount > 0 ? "Looking at your photos…" : "Reading your description…"}
           </h1>
-          <p className="mb-3 mt-1.5 text-[15px] text-muted">Up to a minute. Keep this page open.</p>
-          <ul aria-live="polite">
-            <ReadingLine state="active" label={savedCount > 0 ? "Your photos" : "Your description"} />
-            <ReadingLine state="todo" label="Your questions" />
-          </ul>
+          <p className="mb-4 mt-1.5 text-[15px] text-muted">Usually under a minute. Keep this page open.</p>
+          <ReadingProgress startedAt={analysisStartedAt} photoCount={savedCount} />
         </Screen>
       );
     }
@@ -824,6 +853,47 @@ function PhotoChecklist({ count }: { count: number }) {
         );
       })}
     </ol>
+  );
+}
+
+// Time-based: the AI call reports no progress, so the bar eases toward 90%
+// and the next screen replaces it the moment the questions arrive. Stage
+// labels follow typical timing.
+function ReadingProgress({ startedAt, photoCount }: { startedAt: number; photoCount: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(timer);
+  }, []);
+  const seconds = Math.max(0, (now - (startedAt || now)) / 1000);
+  const percent = Math.round(90 * (1 - Math.exp(-seconds / 14)));
+  const photoStage = photoCount > 0 && seconds < photoCount * 4;
+  const stage = photoStage
+    ? `Looking at photo ${Math.min(photoCount, Math.floor(seconds / 4) + 1)} of ${photoCount}…`
+    : seconds < photoCount * 4 + 8
+      ? "Reading labels and details…"
+      : "Writing your questions…";
+  return (
+    <div>
+      <div
+        role="progressbar"
+        aria-label="Reading what you sent"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        className="h-3 overflow-hidden rounded-full bg-chip"
+      >
+        <div className="h-full rounded-full bg-accent transition-[width] duration-300 ease-out" style={{ width: `${percent}%` }} />
+      </div>
+      <p aria-live="polite" className="mt-2 flex justify-between text-sm text-muted">
+        <span>{stage}</span>
+        <span>{percent}%</span>
+      </p>
+      <ul className="mt-3">
+        <ReadingLine state={photoStage ? "active" : "done"} label={photoCount > 0 ? "Your photos" : "Your description"} result={photoStage ? undefined : "Read"} />
+        <ReadingLine state={photoStage ? "todo" : "active"} label="Your questions" />
+      </ul>
+    </div>
   );
 }
 
