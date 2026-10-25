@@ -1,6 +1,6 @@
 # OneTrip design direction
 
-**Prototype:** open `prototype/onetrip-flow-v3.html` in a browser. Use the Desktop/Phone toggle at the top; the optional features (mic, trips-avoided stat, parts link, price range) can be toggled. Demo scenario: Drew's AC stops cooling, and Coolside Heating & Air needs a capacitor.
+**Prototype:** open `prototype/onetrip-flow-v3.html` in a browser. Use the Desktop/Phone toggle at the top; the optional features (mic, near-misses stat, parts link, price range) can be toggled. Demo scenario: Drew's AC stops cooling, and Coolside Heating & Air needs a capacitor.
 
 ## Decisions
 - **Feel:** contractor = "a sharp apprentice handed me a clipboard" (dense, fast); customer = "a calm helper, done in 90 seconds" (big, one thing at a time).

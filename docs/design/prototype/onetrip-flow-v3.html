@@ -160,6 +160,7 @@ summary{font-weight:700;cursor:pointer}
 .n3{font-family:Archivo;font-weight:800;font-size:12.5px;color:var(--accent-strong)}
 .cost{background:var(--ink);color:#fff;border-radius:18px;padding:22px;display:grid;gap:16px}
 .cost b{font-family:Archivo;font-size:30px;display:block;color:var(--accent)}
+.src2{display:block;font-size:11.5px;opacity:.6;margin-top:6px}
 .lfoot{border-top:1px solid var(--line);padding:18px 22px;display:flex;justify-content:space-between;font-size:13px;color:var(--muted);max-width:1160px;margin:0 auto}
 /* responsive via container width */
 @container (min-width: 760px){
@@ -197,7 +198,7 @@ summary{font-weight:700;cursor:pointer}
 const S={i:0,dev:'desktop',q:0,photo:0,shot:{0:0,1:0},read:0,checked:{},sent:false,deleted:false,
   viewer:null,ai:true,answers:{fan:'No, it’s still',hum:'Yes, humming',thermo:'Yes, it’s warm',smell:'No'},
   opt:{voice:true,savings:true,parts:true,range:true}};
-const OPT=[['voice','Mic'],['savings','Trips-avoided stat'],['parts','Parts buy link'],['range','Price range']];
+const OPT=[['voice','Mic'],['savings','Near-misses stat'],['parts','Parts buy link'],['range','Price range']];
 const SCREENS=[
  ['landing','Landing','Pro'],['login','Log in','Pro'],['onboard','Set up','Pro'],['empty','First run','Pro'],['requests','Requests + brief','Pro'],
  ['newreq','New request','Pro'],['share','Send link','Pro'],
@@ -236,7 +237,7 @@ ${inner}${noTabs?'':`<div class="tabbar">${['Requests','Settings'].map((t,i)=>`<
 
 /* pieces */
 function req(n,addr,issue,tone,status,thumb,ago,sel,click){return `<div class="reqcard ${sel?'sel':''}" onclick="${click||''}"><div class="thumb">${thumb}</div><div class="t"><div class="row between"><b>${n}</b><span class="small muted">${ago}</span></div><div class="addr">${addr}</div><div class="row between" style="margin-top:4px"><span class="small">${issue}</span><span class="st ${tone}">${status}</span></div></div></div>`}
-function reqList(sel){return `${S.opt.savings?`<div class="card row between" style="background:var(--ink);color:#fff;border:0"><div><div class="small" style="opacity:.75">Second trips avoided this month</div><div class="disp" style="font-size:24px;font-weight:800">4 · ~$960</div></div><div class="small" style="opacity:.7;text-align:right">at ~$240<br>per trip</div></div>`:''}
+function reqList(sel){return `${S.opt.savings?`<div class="card row between" style="background:var(--ink);color:#fff;border:0"><div><div class="small" style="opacity:.75">Near misses caught this month</div><div class="disp" style="font-size:24px;font-weight:800">4 · ~$960</div></div><div class="small" style="opacity:.7;text-align:right">at ~$240<br>per trip</div></div>`:''}
 <div class="row between"><div class="label sec">Needs your eyes · 2</div><button class="btn sm desk-only" onclick="go(at('newreq'))">+ New request</button></div>
 ${req('Drew K.','14 Alder Ln, Redmond','AC not cooling','ready','Brief ready',condenserSVG(),'2m',sel,"S.dev==='phone'?go(at('brief')):0")}
 ${req('Priya S.','880 Pine St #4, Kirkland','Furnace won’t ignite','ready','Brief ready','🔥','1h')}
@@ -273,6 +274,10 @@ landing(){return `<div class="lnav"><div class="brand"><span class="logo">1</spa
 <div class="demo"><div class="photo" style="aspect-ratio:1920/1337;background:#ddd"><img src="assets/ac-condenser.jpg" alt="Customer photo of a Carrier outdoor AC unit" style="width:100%;height:100%;object-fit:cover;display:block">${HERO_PINS.map(p=>`<span class="pin pulse" style="left:${p.x}%;top:${p.y}%">${p.n}</span>`).join('')}<span class="demolab">Customer’s photo, read by OneTrip</span><span class="credit">Photo: <a href="https://commons.wikimedia.org/wiki/File:Carrier_Outdoor_Split_Air_Conditioner_Heat_Pump_System_(55005181522).jpg" target="_blank" rel="noopener">Tony Webster</a>, CC BY 4.0</span></div>
 <div class="card bcard"><div class="row between"><span class="label">Likely cause</span><span class="conf high">● High</span></div><div class="disp" style="font-size:18px;font-weight:800;margin:4px 0 8px">Failed run capacitor</div>
 <div class="small"><b>①</b> Carrier outdoor unit · <b>②</b> fan not spinning · <b>③</b> lines intact, no ice</div><div class="small" style="margin-top:6px"><b>Bring:</b> run capacitor · contactor · multimeter</div></div></div></div>
+<div class="lsec"><div class="steps3">
+<div class="card"><div class="n3">NO GUESSWORK</div><h3 style="margin:6px 0 4px;font-size:18px">Know the cost and time before you go</h3><span class="muted small">Likely cause, parts list, and a price range before you roll, so neither of you gets surprised on site.</span></div>
+<div class="card"><div class="n3">NO MISSED JOBS</div><h3 style="margin:6px 0 4px;font-size:18px">Don’t lose the job to a second visit</h3><span class="muted small">A customer who waits two days for a part calls someone else. Fix it the first time and keep them.</span></div>
+<div class="card"><div class="n3">NEAR MISSES</div><h3 style="margin:6px 0 4px;font-size:18px">See the trips you almost lost</h3><span class="muted small">Every brief that changed what you loaded is counted, so you can see the second trips you avoided.</span></div></div></div>
 <div class="lsec"><div class="steps3"><div class="card"><div class="n3">1 · 10 SECONDS</div><h3 style="margin:6px 0 4px;font-size:18px">Add the request</h3><span class="muted small">Name, number, and what they said.</span></div>
 <div class="card"><div class="n3">2 · 90 SECONDS</div><h3 style="margin:6px 0 4px;font-size:18px">They snap photos</h3><span class="muted small">From a text. Questions are written from their photos.</span></div>
 <div class="card"><div class="n3">3 · BEFORE YOU LEAVE</div><h3 style="margin:6px 0 4px;font-size:18px">You load the right parts</h3><span class="muted small">Model, likely cause, and why, with every reason pinned on the photo.</span></div></div></div>
@@ -283,7 +288,7 @@ landing(){return `<div class="lnav"><div class="brand"><span class="logo">1</spa
 <div class="fstep"><div class="fn">You</div><b>Fix it in one trip</b><span>No second visit, no lost afternoon</span></div></div>
 <p class="muted" style="margin:12px 0 0;max-width:720px"><b style="color:var(--ink)">We don’t sell leads or match you with customers.</b> No lead fees, no bidding. OneTrip starts after you’ve won the job, and makes that first visit count. It works alongside whatever you already use.</p></div>
 <div class="lsec"><div class="label" style="margin-bottom:10px">For any trade</div><span class="chip">HVAC</span><span class="chip">Electrical</span><span class="chip">Plumbing</span><span class="chip">Appliance repair</span><span class="chip">Garage doors</span><span class="chip">Handyman</span></div>
-<div class="lsec"><div class="cost"><div><b>1 in 4</b>service calls need a second trip (industry est. 70–80% first-time fix)</div><div><b>$120–$400</b>per repeat visit in fuel, labor, and a lost slot (vendor estimates)</div><div><b>$0</b>OneTrip is free and open source</div></div></div>
+<div class="lsec"><div class="cost"><div><b>1 in 4</b>field service visits don’t fix the problem on the first trip<span class="src2">The Service Council, 2017</span></div><div><b>51%</b>of those failed first visits come down to missing or wrong parts<span class="src2">Aberdeen Group, 2013</span></div><div><b>$0</b>OneTrip is free and open source<span class="src2">MIT license</span></div></div></div>
 <div class="lsec"><div class="card row between wrapr"><div><b>Your customers’ photos stay private.</b><div class="small muted">Stored privately, location data removed, deleted automatically after the job.</div></div><button class="link">How we handle photos →</button></div></div>
 <div class="lfoot"><span>OneTrip · MIT licensed</span><span>Privacy · GitHub</span></div>`},
 
