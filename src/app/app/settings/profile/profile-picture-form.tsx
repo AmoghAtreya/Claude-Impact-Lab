@@ -71,7 +71,7 @@ export function ProfilePictureForm({ avatarUrl }: { avatarUrl: string | null }) 
       className="flex flex-col gap-4"
     >
       <div className="flex items-center gap-4">
-        <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-neutral-200 bg-neutral-100 text-neutral-400">
+        <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-chip text-muted/70">
           {shown ? (
             // eslint-disable-next-line @next/next/no-img-element -- local blob preview or signed URL
             <img src={shown} alt="Profile picture" className="size-full object-cover" />
@@ -92,7 +92,7 @@ export function ProfilePictureForm({ avatarUrl }: { avatarUrl: string | null }) 
           />
           <label
             htmlFor="avatar"
-            className="inline-flex h-9 cursor-pointer items-center rounded-md border border-neutral-300 px-3 text-sm font-medium peer-focus-visible:ring-2 peer-focus-visible:ring-neutral-900/30"
+            className="inline-flex min-h-11 cursor-pointer items-center rounded-xl border-[1.5px] border-line bg-white px-3 text-sm font-bold peer-focus-visible:ring-2 peer-focus-visible:ring-accent-strong"
           >
             {shown ? "Choose a new picture" : "Choose a picture"}
           </label>
@@ -101,7 +101,7 @@ export function ProfilePictureForm({ avatarUrl }: { avatarUrl: string | null }) 
               type="button"
               onClick={remove}
               disabled={removing}
-              className="text-sm underline disabled:opacity-60"
+              className="min-h-10 text-sm font-bold text-accent-strong disabled:opacity-40"
             >
               {removing ? "Removing…" : "Remove"}
             </button>

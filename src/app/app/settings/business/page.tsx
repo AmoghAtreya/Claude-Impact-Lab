@@ -6,7 +6,7 @@ import { RevokeAllLinks } from "./revoke-all-links";
 
 export default function BusinessSettingsPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-neutral-500">Loading…</p>}>
+    <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
       <BusinessSettings />
     </Suspense>
   );
@@ -18,9 +18,9 @@ async function BusinessSettings() {
 
   return (
     <>
-      <section className="rounded-lg border border-neutral-200 bg-white p-5 sm:p-6">
+      <section className="rounded-2xl border border-line bg-white p-5 sm:p-6">
         <h2 className="mb-1 text-base font-semibold">Business details</h2>
-        <p className="mb-5 text-sm text-neutral-600">
+        <p className="mb-5 text-sm text-muted">
           Customers see your business name and contact details when they open
           an intake link.
           {canManage ? null : " Only owners and admins can change these."}
@@ -42,9 +42,9 @@ async function BusinessSettings() {
       </section>
 
       {canManage ? (
-        <section className="rounded-lg border border-neutral-200 bg-white p-5 sm:p-6">
+        <section className="rounded-2xl border border-line bg-white p-5 sm:p-6">
           <h2 className="mb-1 text-base font-semibold">Revoke all intake links</h2>
-          <p className="mb-4 text-sm leading-6 text-neutral-600">
+          <p className="mb-4 text-sm leading-6 text-muted">
             Stops every active customer link from working, for example if
             links were sent to the wrong people. Photos and answers already
             sent are kept. You can create a new link on any request

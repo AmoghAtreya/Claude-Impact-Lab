@@ -40,12 +40,12 @@ export function RevokeAllLinks() {
           type="button"
           onClick={revoke}
           disabled={pending}
-          className="inline-flex h-10 items-center justify-center rounded-md border border-red-300 bg-white px-4 text-sm font-medium text-red-700 disabled:opacity-60"
+          className="inline-flex min-h-11 items-center justify-center rounded-xl border-[1.5px] border-danger/40 bg-white px-4 text-sm font-bold text-danger disabled:opacity-60"
         >
           {pending ? "Revoking…" : "Revoke all active links"}
         </button>
       </div>
-      <p aria-live="polite" className="text-sm text-neutral-700">
+      <p aria-live="polite" className="text-sm text-muted">
         {result}
       </p>
       {error ? (

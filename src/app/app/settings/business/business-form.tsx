@@ -122,7 +122,7 @@ export function BusinessForm({ canManage, timeZones, initial }: BusinessFormProp
         <div className="flex flex-col gap-1.5">
           <label htmlFor="contactPhone" className={labelClassName}>
             Business phone{" "}
-            <span className="font-normal text-neutral-500">(optional)</span>
+            <span className="font-normal text-muted">(optional)</span>
           </label>
           <input
             {...fieldProps("contactPhone")}
@@ -168,7 +168,7 @@ export function BusinessForm({ canManage, timeZones, initial }: BusinessFormProp
             defaultValue={values.linkExpiryDays}
             className={`${inputClassName} w-28`}
           />
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-muted">
             Between {LINK_EXPIRY_DAYS.min} and {LINK_EXPIRY_DAYS.max} days.
             Applies to links created from now on.
           </p>
@@ -191,7 +191,7 @@ export function BusinessForm({ canManage, timeZones, initial }: BusinessFormProp
               </option>
             ))}
           </select>
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-muted">
             Your preference is saved, but photos aren&apos;t deleted
             automatically yet. Until then, delete a request to remove its
             photos.

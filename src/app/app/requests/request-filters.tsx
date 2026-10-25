@@ -74,7 +74,7 @@ export function RequestFilters(props: RequestFiltersProps) {
       action="/app/requests"
       role="search"
       aria-label="Filter requests"
-      className="flex flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4"
+      className="flex flex-col gap-4 rounded-2xl border border-line bg-white p-4"
     >
       <div className="flex flex-col gap-1.5">
         <label htmlFor="filter-q" className={labelClassName}>
@@ -93,7 +93,7 @@ export function RequestFilters(props: RequestFiltersProps) {
           />
           <button
             type="submit"
-            className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-medium"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border-[1.5px] border-line bg-white px-4 text-sm font-bold"
           >
             Search
           </button>
@@ -105,7 +105,7 @@ export function RequestFilters(props: RequestFiltersProps) {
         {select("sort", "Sort by", props.sortOptions)}
       </div>
       {props.showClear ? (
-        <Link href="/app/requests" className="self-start text-sm underline">
+        <Link href="/app/requests" className="inline-flex min-h-10 items-center self-start text-sm font-bold text-accent-strong">
           Clear filters
         </Link>
       ) : null}

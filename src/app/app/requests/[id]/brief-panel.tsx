@@ -4,7 +4,7 @@ import { formatAnswer } from "@/lib/intake-questions";
 import type { IntakeStatus } from "@/lib/service-requests";
 import { BriefAutoRefresh, RetryBriefButton } from "./brief-controls";
 
-const sectionClassName = "rounded-lg border border-neutral-200 bg-white p-5 sm:p-6";
+const sectionClassName = "rounded-2xl border border-line bg-white p-5 sm:p-6";
 
 // The AI service brief (spec B4). Everything here is AI-written from the
 // customer's photos and answers, and labeled as such; the original photos
@@ -36,20 +36,20 @@ export function BriefPanel({
         <h2 id="brief-heading" className="text-base font-semibold">
           Service brief
         </h2>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-muted">
           Written by AI from the customer’s photos and answers. Check it against the photos before relying on it.
         </p>
       </div>
 
       {working ? (
-        <div aria-live="polite" className="mb-4 rounded-md border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-800">
+        <div aria-live="polite" className="mb-4 rounded-xl border border-line bg-page p-4 text-sm text-ink">
           Writing the brief… This usually takes under a minute.
           <BriefAutoRefresh />
         </div>
       ) : null}
 
       {failed ? (
-        <div role="alert" className="mb-4 flex flex-col gap-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <div role="alert" className="mb-4 flex flex-col gap-3 rounded-xl border border-danger/40 bg-danger-soft p-4 text-sm text-danger">
           <p>
             {brief
               ? "Updating the brief didn’t work. The last brief is shown below and may be out of date."
@@ -60,7 +60,7 @@ export function BriefPanel({
       ) : null}
 
       {!brief && !working && !failed ? (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-muted">
           {intakeStatus === "submitted"
             ? "No brief yet."
             : "The brief appears here after the customer sends their photos and answers."}
@@ -72,7 +72,7 @@ export function BriefPanel({
       ) : null}
 
       {brief ? (
-        <p className="mt-4 text-xs text-neutral-500">
+        <p className="mt-4 text-xs text-muted">
           Version {brief.version} · {formatDateTime(brief.createdAt)} · {brief.model}
         </p>
       ) : null}
@@ -92,13 +92,13 @@ function BriefBody({
   return (
     <div className="flex flex-col gap-5">
       {brief.urgent_concern ? (
-        <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">
+        <p role="alert" className="rounded-xl border border-danger/40 bg-danger-soft p-4 text-sm leading-6 text-danger">
           <span className="font-medium">Possible safety concern:</span> {brief.urgent_concern} Confirm with the customer
           before the visit.
         </p>
       ) : null}
 
-      <p className="text-base leading-7 text-neutral-900">{brief.summary}</p>
+      <p className="text-base leading-7 text-ink">{brief.summary}</p>
 
       <BriefList title="What the customer reported">
         {brief.customer_reported.map((item, i) => (
@@ -120,7 +120,7 @@ function BriefBody({
         {brief.equipment.map((item, i) => (
           <li key={i}>
             {item.description}
-            <span className="block text-neutral-600">
+            <span className="block text-muted">
               Make: {item.make ?? "not legible"} · Model: {item.model ?? "not legible"}
               {item.serial ? ` · Serial: ${item.serial}` : ""} <Ref text={photoRef(item.photo_ids)} />
             </span>
@@ -131,7 +131,7 @@ function BriefBody({
       {brief.symptom_timeline ? (
         <div className="space-y-1">
           <h3 className="text-sm font-semibold">Timeline</h3>
-          <p className="text-sm leading-6 text-neutral-800">{brief.symptom_timeline}</p>
+          <p className="text-sm leading-6 text-ink">{brief.symptom_timeline}</p>
         </div>
       ) : null}
 
@@ -139,7 +139,7 @@ function BriefBody({
         {brief.possible_explanations.map((item, i) => (
           <li key={i}>
             {item.explanation}
-            {item.basis ? <span className="block text-neutral-600">Based on: {item.basis}</span> : null}
+            {item.basis ? <span className="block text-muted">Based on: {item.basis}</span> : null}
           </li>
         ))}
       </BriefList>
@@ -168,22 +168,22 @@ export function CustomerAnswers({ intake }: { intake: RequestIntakeView }) {
         <h2 id="answers-heading" className="text-base font-semibold">
           Customer answers
         </h2>
-        <p className="text-sm text-neutral-500">Questions written by AI; answers exactly as the customer gave them.</p>
+        <p className="text-sm text-muted">Questions written by AI; answers exactly as the customer gave them.</p>
       </div>
       <ol className="flex flex-col gap-4">
         {intake.questions.map((q, i) => (
           <li key={q.id} className="space-y-1 text-sm">
-            <p className="text-neutral-600">
+            <p className="text-muted">
               Answer {i + 1}. {q.label}
             </p>
-            <p className="whitespace-pre-line text-neutral-900">{formatAnswer(q.answer)}</p>
+            <p className="whitespace-pre-line text-ink">{formatAnswer(q.answer)}</p>
           </li>
         ))}
       </ol>
       {intake.customerNote ? (
         <div className="mt-4 space-y-1 text-sm">
-          <p className="text-neutral-600">Closing note</p>
-          <p className="whitespace-pre-line text-neutral-900">{intake.customerNote}</p>
+          <p className="text-muted">Closing note</p>
+          <p className="whitespace-pre-line text-ink">{intake.customerNote}</p>
         </div>
       ) : null}
     </section>
@@ -195,13 +195,13 @@ function BriefList({ title, children }: { title: string; children: ReactNode[] }
   return (
     <div className="space-y-1">
       <h3 className="text-sm font-semibold">{title}</h3>
-      <ul className="list-disc space-y-1.5 pl-5 text-sm leading-6 text-neutral-800">{children}</ul>
+      <ul className="list-disc space-y-1.5 pl-5 text-sm leading-6 text-ink">{children}</ul>
     </div>
   );
 }
 
 function Ref({ text }: { text: string | null }) {
-  return text ? <span className="text-neutral-500">({text})</span> : null;
+  return text ? <span className="text-muted">({text})</span> : null;
 }
 
 function refList(numbers: number[], noun: string) {

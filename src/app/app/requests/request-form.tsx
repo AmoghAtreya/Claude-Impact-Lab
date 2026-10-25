@@ -80,7 +80,7 @@ export function RequestForm({
     "aria-describedby": state.fieldErrors?.[field] ? `${field}-error` : undefined,
   });
   const optional = (
-    <span className="font-normal text-neutral-500">(optional)</span>
+    <span className="font-normal text-muted">(optional)</span>
   );
 
   return (
@@ -175,7 +175,7 @@ export function RequestForm({
             ))}
           </select>
           {workspaceTrade ? (
-            <p className="text-sm text-neutral-500">
+            <p className="text-sm text-muted">
               Defaults to your business&apos;s trade:{" "}
               {tradeLabel(workspaceTrade.trade, workspaceTrade.tradeOther)}.
             </p>
@@ -211,7 +211,7 @@ export function RequestForm({
             placeholder="e.g. AC running but not cooling, water under the indoor unit"
             className={`${inputClassName} h-auto py-2`}
           />
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted">
             Anything you already know, so the customer isn&apos;t asked again.
           </p>
           {fieldError("issueDescription")}
@@ -232,7 +232,7 @@ export function RequestForm({
         >
           {pending ? pendingLabel : submitLabel}
         </button>
-        <Link href={cancelHref} className="text-sm underline">
+        <Link href={cancelHref} className="min-h-10 text-sm font-bold text-accent-strong">
           Cancel
         </Link>
       </div>
