@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { statusClassName } from "@/app/ui/form-styles";
-import { HVAC_PHOTO_PROMPTS } from "@/lib/intake-demo";
+import { getRequestIntake } from "@/lib/intake-ai";
 import { intakeUrl } from "@/lib/intake-links";
 import { listRequestPhotos, type RequestPhoto } from "@/lib/intake-photos";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/lib/service-requests";
 import { tradeLabel } from "@/lib/trades";
 import { canManageWorkspace, requireWorkspace } from "@/lib/workspace";
+import { BriefPanel, CustomerAnswers } from "./brief-panel";
 import { IntakeLinkPanel } from "./intake-link-panel";
 import { ManageRequestPanel } from "./manage-request-panel";
 
@@ -52,6 +53,10 @@ async function RequestDetail({
   });
   const link = request.activeLink;
   const expiresAt = link ? new Date(link.expiresAt) : null;
+  const [photos, intake] = await Promise.all([
+    listRequestPhotos(workspace.id, request.id),
+    getRequestIntake(workspace.id, request.id),
+  ]);
 
   const details: [string, string | null][] = [
     ["Phone", request.customerPhone],
@@ -60,7 +65,6 @@ async function RequestDetail({
     ["Trade", tradeLabel(request.trade, request.tradeOther)],
     ["Issue", request.issueDescription],
   ];
-  const photos = await listRequestPhotos(workspace.id, request.id);
 
   return (
     <>
@@ -88,6 +92,16 @@ async function RequestDetail({
           Changes saved.
         </p>
       ) : null}
+
+      <BriefPanel
+        requestId={request.id}
+        intakeStatus={request.intakeStatus}
+        intake={intake}
+        photoIds={photos.map((photo) => photo.id)}
+        formatDateTime={(iso) => formatDateTime.format(new Date(iso))}
+      />
+
+      <CustomerAnswers intake={intake} />
 
       <IntakeLinkPanel
         requestId={request.id}
@@ -160,9 +174,9 @@ function RequestPhotoGallery({ photos }: { photos: RequestPhoto[] }) {
   return (
     <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
       {photos.map((photo, index) => {
-        const label =
-          HVAC_PHOTO_PROMPTS.find((prompt) => prompt.id === photo.promptId)
-            ?.title ?? `Customer photo ${index + 1}`;
+        const label = photo.caption
+          ? `Photo ${index + 1}: ${photo.caption}`
+          : `Photo ${index + 1}`;
         return (
           <li key={photo.id} className="space-y-1.5">
             <a

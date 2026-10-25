@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useState, useSyncExternalStore, useTransition } from "react";
-import { primaryButtonClassName } from "@/app/ui/form-styles";
+import {
+  primaryButtonClassName,
+  secondaryButtonClassName,
+} from "@/app/ui/form-styles";
 import { markIntakeLinkShared, regenerateIntakeLink, revokeIntakeLink } from "../actions";
 
 type IntakeLinkPanelProps = {
@@ -13,9 +16,6 @@ type IntakeLinkPanelProps = {
   expiresLabel: string | null;
   expired: boolean;
 };
-
-const secondaryButtonClassName =
-  "inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-medium disabled:opacity-60";
 
 function subscribeNoop() {
   return () => {};

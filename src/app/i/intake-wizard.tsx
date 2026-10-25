@@ -1,9 +1,37 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { HVAC_PHOTO_PROMPTS, analyzeIntake, readPhoto } from "@/lib/intake-demo";
-import { INTAKE_PHOTO_MAX_BYTES, type IntakePhoto } from "@/lib/intake-photo-rules";
-import type { IntakeAnalysis, IntakeAnswers, IntakeQuestion, PhotoReading } from "@/lib/intake-types";
+import {
+  inputClassName,
+  primaryButtonClassName,
+  secondaryButtonClassName,
+} from "@/app/ui/form-styles";
+import { demoAnalysis } from "@/lib/intake-demo";
+import {
+  INTAKE_CAPTION_MAX_LENGTH,
+  INTAKE_DESCRIPTION_MAX_LENGTH,
+  INTAKE_PHOTO_MAX_BYTES,
+  INTAKE_PHOTO_MAX_COUNT,
+  INTAKE_PHOTO_MIN_COUNT,
+  type IntakePhoto,
+} from "@/lib/intake-photo-rules";
+import {
+  formatAnswer,
+  MAX_TEXT_ANSWER_LENGTH,
+  YES_NO_UNKNOWN_OPTIONS,
+  type AnswerValue,
+  type IntakeAnalysisView,
+  type IntakeQuestion,
+} from "@/lib/intake-questions";
+import {
+  analyzeIntakeAction,
+  captionPhotoAction,
+  removePhotoAction,
+  rotatePhotoAction,
+  saveAnswerAction,
+  saveDescriptionAction,
+  submitIntakeAction,
+} from "./[token]/actions";
 
 // Where a photo is in being saved. "local" photos (preview, demo) are never uploaded.
 type PhotoUpload =
@@ -11,18 +39,38 @@ type PhotoUpload =
   | { status: "uploading"; progress: number }
   | { status: "saved"; id: string }
   | { status: "failed"; error: string; retryable: boolean; file: File; replaces: string | null };
-type Photo = { url: string; reading: PhotoReading | null; upload: PhotoUpload };
+type Photo = {
+  /** Stable React key; survives replacing the photo. */
+  key: string;
+  url: string;
+  caption: string;
+  /** The caption the server has, to skip no-op saves. */
+  savedCaption: string;
+  upload: PhotoUpload;
+  /** Local-only rotation for previews; live photos are rotated on the server. */
+  rotation: number;
+  busy: "rotating" | "removing" | null;
+  error: string | null;
+};
 type Step =
   | { kind: "welcome" }
-  | { kind: "photo"; index: number }
+  | { kind: "photos" }
+  | { kind: "no-photo" }
   | { kind: "reading" }
   | { kind: "question"; index: number }
-  | { kind: "describe" }
+  | { kind: "note" }
   | { kind: "review" }
   | { kind: "done" };
+type Analysis =
+  | { status: "loading" }
+  | { status: "ready"; view: IntakeAnalysisView }
+  | { status: "failed"; error: string };
 
-// Photo-first customer intake: photos → "looking at your photos" → questions
-// written from the photos → review → sent. See docs/design/README.md.
+const EMPTY_ANALYSIS: IntakeAnalysisView = { questions: [], photoIssues: [], urgentConcern: null };
+
+// Photo-first customer intake: 1–5 photos (or a description if no photo is
+// possible) → AI looks at them and writes a few questions → answers → review
+// → sent. Previews and the demo run the same screens with sample questions.
 export function IntakeWizard({
   businessName,
   customerName,
@@ -35,21 +83,36 @@ export function IntakeWizard({
   businessPhone?: string | null;
   /** Inside the contractor preview card instead of full screen. */
   embedded?: boolean;
-  /** A real intake link: photos upload as they're taken and are restored on reload. */
-  live?: { token: string; photos: IntakePhoto[] };
+  /** A real intake link: everything is saved as it's entered and restored on reload. */
+  live?: {
+    token: string;
+    photos: IntakePhoto[];
+    description: string;
+    answers: Record<string, AnswerValue>;
+  };
 }) {
-  const prompts = HVAC_PHOTO_PROMPTS;
   const [step, setStep] = useState<Step>({ kind: "welcome" });
-  const [photos, setPhotos] = useState<(Photo | null)[]>(() =>
-    prompts.map((prompt) => {
-      const saved = live?.photos.find((photo) => photo.promptId === prompt.id);
-      return saved ? { url: saved.thumbnailUrl, reading: null, upload: { status: "saved", id: saved.id } } : null;
-    }),
+  const [photos, setPhotos] = useState<Photo[]>(() =>
+    (live?.photos ?? []).map((saved) => ({
+      key: saved.id,
+      url: saved.thumbnailUrl,
+      caption: saved.caption,
+      savedCaption: saved.caption,
+      upload: { status: "saved", id: saved.id },
+      rotation: 0,
+      busy: null,
+      error: null,
+    })),
   );
-  const [analysis, setAnalysis] = useState<IntakeAnalysis | null>(null);
-  const [readCount, setReadCount] = useState(0);
-  const [answers, setAnswers] = useState<IntakeAnswers>({});
+  const [description, setDescription] = useState(live?.description ?? "");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<Analysis>({ status: "loading" });
+  // Set when the customer chooses to send without the AI questions.
+  const [skipQuestions, setSkipQuestions] = useState(false);
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>(live?.answers ?? {});
   const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Every preview URL we create, revoked when the wizard unmounts.
   const objectUrls = useRef<string[]>([]);
@@ -58,304 +121,501 @@ export function IntakeWizard({
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
   }, []);
 
-  // Photos saved on an earlier visit still need a reading.
-  useEffect(() => {
-    prompts.forEach((prompt, index) => {
-      if (!live?.photos.some((photo) => photo.promptId === prompt.id)) return;
-      readPhoto(prompt.id).then((reading) =>
-        setPhotos((prev) => prev.map((p, i) => (i === index && p && !p.reading ? { ...p, reading } : p))),
-      );
-    });
-    // Only for what the page loaded with.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Uploads run one at a time so several photos picked at once don't
+  // compete for a phone's connection.
+  const uploadQueue = useRef<Promise<void>>(Promise.resolve());
+  // Latest typed caption per photo, read when an upload finishes.
+  const latestCaption = useRef(new Map<string, string>());
 
-  // Start analysis as soon as we reach the reading screen; tick the steps off.
-  useEffect(() => {
-    if (step.kind !== "reading") return;
-    let cancelled = false;
-    analyzeIntake().then((result) => {
-      if (cancelled) return;
-      setAnalysis(result);
-      result.steps.forEach((_, i) =>
-        setTimeout(() => !cancelled && setReadCount(i + 1), 700 * (i + 1)),
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [step.kind]);
-
-  const questions = (analysis?.questions ?? []).filter(
-    (q) => !q.showIf || answers[q.showIf.questionId] !== q.showIf.notAnswer,
-  );
   const firstName = businessName.split(" ")[0];
+  const savedCount = photos.filter((p) => p.upload.status === "saved" || p.upload.status === "local").length;
+  const pending = photos.some((p) => p.upload.status === "uploading" || p.busy);
+  const failedCount = photos.filter((p) => p.upload.status === "failed").length;
+  const canContinue = savedCount >= INTAKE_PHOTO_MIN_COUNT && !pending && failedCount === 0;
+  const view = analysis.status === "ready" && !skipQuestions ? analysis.view : EMPTY_ANALYSIS;
+  const questions = view.questions;
+
+  // The AI looks at whatever was sent each time the customer reaches this
+  // screen. Unchanged photos reuse the stored result on the server, so going
+  // back and forth doesn't repeat the work or change the questions.
+  async function runAnalysis() {
+    setAnalysis({ status: "loading" });
+    setSkipQuestions(false);
+    if (!live) {
+      setAnalysis({ status: "ready", view: await demoAnalysis() });
+      return;
+    }
+    const result = await analyzeIntakeAction(live.token);
+    setAnalysis(result.ok ? { status: "ready", view: result.analysis } : { status: "failed", error: result.error });
+  }
 
   function goToReading() {
-    setReadCount(0);
     setStep({ kind: "reading" });
+    void runAnalysis();
   }
 
-  function setUpload(index: number, url: string, upload: PhotoUpload) {
-    setPhotos((prev) => prev.map((p, i) => (i === index && p?.url === url ? { ...p, upload } : p)));
+  function afterReading() {
+    setStep(questions.length ? { kind: "question", index: 0 } : { kind: "note" });
   }
 
-  // Uploads in the background so the customer is never blocked. Network
-  // failures retry automatically before asking the customer.
-  async function savePhoto(index: number, url: string, file: File, replaces: string | null) {
+  function afterQuestions(index: number) {
+    setStep(index + 1 < questions.length ? { kind: "question", index: index + 1 } : { kind: "note" });
+  }
+
+  function updatePhoto(key: string, change: Partial<Photo> | ((photo: Photo) => Partial<Photo>)) {
+    setPhotos((prev) =>
+      prev.map((p) => (p.key === key ? { ...p, ...(typeof change === "function" ? change(p) : change) } : p)),
+    );
+  }
+
+  // Ignores progress from an upload that was since replaced.
+  function setUpload(key: string, url: string, upload: PhotoUpload) {
+    setPhotos((prev) => prev.map((p) => (p.key === key && p.url === url ? { ...p, upload } : p)));
+  }
+
+  async function saveCaption(key: string, photoId: string, caption: string) {
+    if (!live) return;
+    const result = await captionPhotoAction(live.token, photoId, caption);
+    updatePhoto(key, result.ok ? { savedCaption: caption, error: null } : { error: result.error });
+  }
+
+  // Network failures retry automatically before asking the customer.
+  async function savePhoto(key: string, url: string, file: File, replaces: string | null) {
     if (!live) return;
     for (let attempt = 0; ; attempt++) {
-      setUpload(index, url, { status: "uploading", progress: 0 });
-      const result = await uploadPhoto(live.token, file, prompts[index].id, replaces, (progress) =>
-        setUpload(index, url, { status: "uploading", progress }),
+      setUpload(key, url, { status: "uploading", progress: 0 });
+      const result = await uploadPhoto(live.token, file, replaces, (progress) =>
+        setUpload(key, url, { status: "uploading", progress }),
       );
       if (result.ok) {
-        setUpload(index, url, { status: "saved", id: result.photo.id });
+        setUpload(key, url, { status: "saved", id: result.photo.id });
+        // A caption typed while the photo was uploading (or kept from a
+        // replaced photo) is saved onto the new one.
+        const typed = latestCaption.current.get(key)?.trim();
+        if (typed) void saveCaption(key, result.photo.id, typed);
+        else updatePhoto(key, { savedCaption: "" });
         return;
       }
       if (!result.retryable || attempt >= 2) {
-        setUpload(index, url, { status: "failed", error: result.error, retryable: result.retryable, file, replaces });
+        setUpload(key, url, { status: "failed", error: result.error, retryable: result.retryable, file, replaces });
         return;
       }
       await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
     }
   }
 
-  function addPhoto(index: number, file: File) {
+  function queueUpload(key: string, url: string, file: File, replaces: string | null) {
+    uploadQueue.current = uploadQueue.current.then(() => savePhoto(key, url, file, replaces));
+  }
+
+  function initialUpload(file: File, replaces: string | null): PhotoUpload {
+    if (!live) return { status: "local" };
+    if (file.size > INTAKE_PHOTO_MAX_BYTES) {
+      return {
+        status: "failed",
+        error: "This photo is larger than 10 MB. Retake it or choose a smaller one.",
+        retryable: false,
+        file,
+        replaces,
+      };
+    }
+    return { status: "uploading", progress: 0 };
+  }
+
+  // Returns the keys of the photos added.
+  function addPhotos(files: File[]): string[] {
+    setNotice(null);
+    const room = INTAKE_PHOTO_MAX_COUNT - photos.length;
+    if (files.length > room) {
+      setNotice(`You can add up to ${INTAKE_PHOTO_MAX_COUNT} photos, so only the first ${room} were added.`);
+    }
+    const added = files.slice(0, Math.max(room, 0)).map((file) => {
+      const url = URL.createObjectURL(file);
+      objectUrls.current.push(url);
+      const photo: Photo = {
+        key: crypto.randomUUID(),
+        url,
+        caption: "",
+        savedCaption: "",
+        upload: initialUpload(file, null),
+        rotation: 0,
+        busy: null,
+        error: null,
+      };
+      return { file, photo };
+    });
+    setPhotos((prev) => [...prev, ...added.map((a) => a.photo)]);
+    for (const { file, photo } of added) {
+      if (photo.upload.status === "uploading") queueUpload(photo.key, photo.url, file, null);
+    }
+    return added.map((a) => a.photo.key);
+  }
+
+  // Replaces a photo in place. A saved photo is swapped on the server only
+  // once the new one is stored, so a failed upload never loses the old one.
+  function replacePhoto(photo: Photo, file: File) {
     const url = URL.createObjectURL(file);
     objectUrls.current.push(url);
-    const previous = photos[index];
-    // A retake replaces the saved photo for this prompt.
     const replaces =
-      previous?.upload.status === "saved"
-        ? previous.upload.id
-        : previous?.upload.status === "failed"
-          ? previous.upload.replaces
+      photo.upload.status === "saved"
+        ? photo.upload.id
+        : photo.upload.status === "failed"
+          ? photo.upload.replaces
           : null;
-    const tooLarge = file.size > INTAKE_PHOTO_MAX_BYTES;
-    const upload: PhotoUpload = !live
-      ? { status: "local" }
-      : tooLarge
-        ? { status: "failed", error: "This photo is larger than 10 MB. Retake it or choose a smaller one.", retryable: false, file, replaces }
-        : { status: "uploading", progress: 0 };
-    setPhotos((prev) => {
-      const next = [...prev];
-      if (next[index]) URL.revokeObjectURL(next[index]!.url);
-      next[index] = { url, reading: null, upload };
-      return next;
-    });
-    readPhoto(prompts[index].id).then((reading) =>
-      setPhotos((prev) => {
-        const next = [...prev];
-        if (next[index]?.url === url) next[index] = { ...next[index]!, reading };
-        return next;
-      }),
+    const upload = initialUpload(file, replaces);
+    latestCaption.current.set(photo.key, photo.caption);
+    updatePhoto(photo.key, { url, upload, rotation: 0, error: null });
+    if (upload.status === "uploading") queueUpload(photo.key, url, file, replaces);
+  }
+
+  async function removePhoto(photo: Photo) {
+    if (live && photo.upload.status === "saved") {
+      updatePhoto(photo.key, { busy: "removing", error: null });
+      const result = await removePhotoAction(live.token, photo.upload.id);
+      if (!result.ok) {
+        updatePhoto(photo.key, { busy: null, error: result.error });
+        return;
+      }
+    }
+    // Failed uploads were already cleaned up on the server.
+    setPhotos((prev) => prev.filter((p) => p.key !== photo.key));
+    setNotice(null);
+  }
+
+  async function rotatePhoto(photo: Photo) {
+    if (!live) {
+      updatePhoto(photo.key, (p) => ({ rotation: (p.rotation + 90) % 360 }));
+      return;
+    }
+    if (photo.upload.status !== "saved") return;
+    updatePhoto(photo.key, { busy: "rotating", error: null });
+    const result = await rotatePhotoAction(live.token, photo.upload.id);
+    updatePhoto(
+      photo.key,
+      result.ok ? { busy: null, url: result.thumbnailUrl } : { busy: null, error: result.error },
     );
-    if (upload.status === "uploading") void savePhoto(index, url, file, replaces);
+  }
+
+  function commitCaption(photo: Photo) {
+    const caption = photo.caption.trim();
+    if (photo.upload.status === "saved" && caption !== photo.savedCaption) {
+      void saveCaption(photo.key, photo.upload.id, caption);
+    }
+  }
+
+  // Saves one answer. Returns an error message, or null when saved.
+  async function saveAnswer(question: IntakeQuestion, value: AnswerValue): Promise<string | null> {
+    if (live) {
+      const result = await saveAnswerAction(live.token, question.id, value);
+      if (!result.ok) return result.error;
+      value = result.value;
+    }
+    setAnswers((prev) => ({ ...prev, [question.id]: value }));
+    return null;
+  }
+
+  async function submit() {
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    if (live) {
+      const result = await submitIntakeAction(live.token, note);
+      if (!result.ok) {
+        setSubmitting(false);
+        setSubmitError(result.error);
+        return;
+      }
+    }
+    setStep({ kind: "done" });
   }
 
   if (step.kind === "welcome") {
     return (
       <Screen
         embedded={embedded}
-        action={<Primary onClick={() => setStep({ kind: "photo", index: 0 })}>Start with photos</Primary>}
+        action={<Primary onClick={() => setStep({ kind: "photos" })}>Start with a photo</Primary>}
       >
-        <div className="flex items-center gap-3">
-          <div className="grid h-13 w-13 shrink-0 place-items-center rounded-2xl bg-ink font-display font-extrabold text-white">
-            {initials(businessName)}
-          </div>
-          <div>
-            <b>{businessName}</b>
-            {businessPhone ? <p className="text-sm text-muted">{businessPhone}</p> : null}
-          </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-neutral-600">{businessName}</p>
+          {businessPhone ? <p className="text-sm text-neutral-500">{businessPhone}</p> : null}
         </div>
-        <h1 className="mt-6 font-display text-[30px] font-bold leading-[1.08] tracking-tight">
-          Hi {customerName}, help us fix it in one trip.
-        </h1>
-        <p className="mt-2 text-muted">{businessName} asked for a few photos so they bring the right parts.</p>
-        <div className="my-5 grid grid-cols-3 gap-2.5 text-center text-sm">
-          <Effort big={String(prompts.length)} label="photos" />
-          <Effort big="~3" label="quick taps" />
-          <Effort big="90s" label="total" />
-        </div>
-        <p className="text-sm text-muted">
-          No app or account. Only {businessName} sees your photos. We’ll never ask you to open covers or touch
+        <h1 className="text-2xl font-semibold tracking-tight">Hi {customerName}, show us the problem</h1>
+        <p className="text-base leading-7 text-neutral-700">
+          {businessName} asked for a photo of the problem and a few quick answers so they can bring the right parts.
+          It takes about two minutes.
+        </p>
+        <p className="text-sm leading-6 text-neutral-500">
+          No app or account needed. Only {businessName} sees your photos. We’ll never ask you to open covers or touch
           wiring. Submitting doesn’t book an appointment.
         </p>
       </Screen>
     );
   }
 
-  if (step.kind === "photo") {
-    const prompt = prompts[step.index];
-    const photo = photos[step.index];
-    const isLast = step.index === prompts.length - 1;
-    const unusable = photo?.upload.status === "failed" && !photo.upload.retryable;
-    const next = () => (isLast ? goToReading() : setStep({ kind: "photo", index: step.index + 1 }));
+  if (step.kind === "photos") {
+    const full = photos.length >= INTAKE_PHOTO_MAX_COUNT;
+    const blocker = pending
+      ? "Wait for your photos to finish saving."
+      : failedCount > 0
+        ? "Try again or remove the photo that didn’t save."
+        : null;
     return (
       <Screen
         embedded={embedded}
-        back={() => setStep(step.index === 0 ? { kind: "welcome" } : { kind: "photo", index: step.index - 1 })}
+        back={() => setStep({ kind: "welcome" })}
         action={
-          photo ? (
+          photos.length > 0 ? (
             <>
-              <PhotoInput
-                capture
-                onFile={(f) => addPhoto(step.index, f)}
-                variant="ghost"
-                disabled={photo.upload.status === "uploading"}
-              >
-                Retake
-              </PhotoInput>
-              <Primary onClick={next} disabled={!photo.reading || unusable} grow>
-                {photo.reading ? (isLast ? "Done with photos" : "Next photo") : "Checking…"}
+              <Primary onClick={goToReading} disabled={!canContinue}>
+                Continue
               </Primary>
+              {blocker ? <p className="text-sm text-neutral-500">{blocker}</p> : null}
             </>
           ) : (
-            <>
-              <PhotoInput onFile={(f) => addPhoto(step.index, f)} variant="ghost">
-                Choose photo
-              </PhotoInput>
-              <PhotoInput capture onFile={(f) => addPhoto(step.index, f)} grow>
-                📷 Take photo
-              </PhotoInput>
-            </>
+            <button type="button" onClick={() => setStep({ kind: "no-photo" })} className="self-start text-sm underline">
+              I can’t take a photo
+            </button>
           )
         }
       >
-        <p className="text-sm text-muted">
-          Photo {step.index + 1} of {prompts.length}
-        </p>
-        <h1 className="mt-1 font-display text-2xl font-bold leading-tight">{prompt.title}</h1>
-        <p className="mb-4 mt-1.5 text-[15px] text-muted">{prompt.hint}</p>
-        {photo ? (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element -- local blob preview */}
-            <img src={photo.url} alt={prompt.title} className="aspect-[4/3] w-full rounded-2xl border border-line object-cover" />
-            <div
-              role="status"
-              className={`mt-3 rounded-xl p-3 text-[15px] font-semibold ${
-                photo.reading ? "bg-ok-soft text-ok" : "bg-chip text-muted"
-              }`}
-            >
-              {photo.reading ? `✓ We read: ${photo.reading.summary}` : "Checking your photo…"}
-            </div>
-            <UploadStatus
-              upload={photo.upload}
-              onRetry={(failed) => {
-                setUpload(step.index, photo.url, { status: "uploading", progress: 0 });
-                void savePhoto(step.index, photo.url, failed.file, failed.replaces);
-              }}
-            />
-          </>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Take a photo of the problem</h1>
+          <ul className="list-disc space-y-1 pl-5 text-base leading-7 text-neutral-700">
+            <li>Start with the whole thing that isn’t working, like the appliance, fixture, or area.</li>
+            <li>Add close-ups of anything leaking, broken, burnt, or showing an error.</li>
+            <li>A sticker with the brand or model helps, if it’s easy to see. Don’t open covers.</li>
+          </ul>
+          <p className="text-sm text-neutral-500">
+            At least 1 photo, up to {INTAKE_PHOTO_MAX_COUNT}. {photos.length} added.
+          </p>
+        </div>
+
+        {photos.length > 0 ? (
+          <ul className="flex flex-col gap-4">
+            {photos.map((photo, index) => (
+              <PhotoCard
+                key={photo.key}
+                photo={photo}
+                index={index}
+                canRotate={!live || photo.upload.status === "saved"}
+                onCaption={(caption) => {
+                  latestCaption.current.set(photo.key, caption);
+                  updatePhoto(photo.key, { caption });
+                }}
+                onCaptionDone={() => commitCaption(photo)}
+                onRotate={() => void rotatePhoto(photo)}
+                onReplace={(file) => replacePhoto(photo, file)}
+                onRemove={() => void removePhoto(photo)}
+                onRetry={(failed) => {
+                  setUpload(photo.key, photo.url, { status: "uploading", progress: 0 });
+                  queueUpload(photo.key, photo.url, failed.file, failed.replaces);
+                }}
+              />
+            ))}
+          </ul>
         ) : (
-          <>
-            <div className="grid aspect-[4/3] w-full place-items-center rounded-2xl border-2 border-dashed border-line bg-chip text-center text-muted">
-              <span>
-                <span className="block text-4xl">📷</span>
-                Your photo will show here
-              </span>
-            </div>
-            <button type="button" onClick={next} className="mt-4 font-bold text-accent-strong">
-              I can’t get this photo
-            </button>
-          </>
+          <div className="flex aspect-[4/3] w-full items-center justify-center rounded-md border border-dashed border-neutral-300 bg-neutral-50 text-sm text-neutral-500">
+            Your photos will show here
+          </div>
+        )}
+
+        {notice ? (
+          <p role="status" className="text-sm text-neutral-700">
+            {notice}
+          </p>
+        ) : null}
+
+        {full ? (
+          <p className="text-sm text-neutral-500">That’s the most photos you can add. Remove one to add another.</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <PhotoInput capture onFiles={addPhotos} variant={photos.length === 0 ? "primary" : "secondary"}>
+              {photos.length === 0 ? "Take a photo" : "Take another photo"}
+            </PhotoInput>
+            <PhotoInput multiple onFiles={addPhotos} variant="secondary">
+              {photos.length === 0 ? "Upload a photo" : "Upload another photo"}
+            </PhotoInput>
+          </div>
         )}
       </Screen>
     );
   }
 
+  if (step.kind === "no-photo") {
+    return (
+      <NoPhotoStep
+        embedded={embedded}
+        initial={description}
+        onBack={() => setStep({ kind: "photos" })}
+        onSave={async (text) => {
+          if (live) {
+            const result = await saveDescriptionAction(live.token, text);
+            if (!result.ok) return result.error;
+          }
+          setDescription(text);
+          goToReading();
+          return null;
+        }}
+      />
+    );
+  }
+
   if (step.kind === "reading") {
-    const steps = analysis?.steps ?? [];
-    const ready = analysis && readCount >= steps.length;
+    const backToSend = () => setStep(savedCount > 0 ? { kind: "photos" } : { kind: "no-photo" });
+    if (analysis.status === "loading") {
+      return (
+        <Screen embedded={embedded}>
+          <div aria-live="polite" className="space-y-2">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {savedCount > 0 ? "Looking at your photos…" : "Reading your description…"}
+            </h1>
+            <p className="text-base leading-7 text-neutral-700">
+              This can take up to a minute. Keep this page open.
+            </p>
+          </div>
+        </Screen>
+      );
+    }
+    if (analysis.status === "failed") {
+      return (
+        <Screen
+          embedded={embedded}
+          back={backToSend}
+          action={
+            <>
+              <Primary onClick={() => void runAnalysis()}>Try again</Primary>
+              <button
+                type="button"
+                onClick={() => {
+                  setSkipQuestions(true);
+                  setStep({ kind: "note" });
+                }}
+                className={secondaryButtonClassName}
+              >
+                Send without questions
+              </button>
+            </>
+          }
+        >
+          <h1 className="text-2xl font-semibold tracking-tight">We couldn’t finish that</h1>
+          <p role="alert" className="text-base leading-7 text-neutral-700">
+            {analysis.error}
+          </p>
+          <p className="text-sm text-neutral-500">
+            Your photos are saved. {firstName} will still see everything you send.
+          </p>
+        </Screen>
+      );
+    }
+
+    const issues = analysis.view.photoIssues;
     return (
       <Screen
         embedded={embedded}
+        back={backToSend}
         action={
-          <Primary disabled={!ready} onClick={() => setStep({ kind: "question", index: 0 })}>
-            {ready ? "Answer a few quick questions" : "Almost ready…"}
-          </Primary>
+          issues.length > 0 ? (
+            <>
+              <Primary onClick={() => setStep({ kind: "photos" })}>Fix my photos</Primary>
+              <button type="button" onClick={() => afterReading()} className={secondaryButtonClassName}>
+                Continue anyway
+              </button>
+            </>
+          ) : (
+            <Primary onClick={() => afterReading()}>
+              {questions.length ? "Answer a few quick questions" : "Continue"}
+            </Primary>
+          )
         }
       >
-        <h1 className="mt-2 font-display text-2xl font-bold">Looking at your photos…</h1>
-        <p className="mb-3 mt-1.5 text-[15px] text-muted">A few seconds. {firstName} will see everything you sent.</p>
-        <ul aria-live="polite">
-          {(steps.length ? steps : [{ label: "Your photos", result: "" }]).map((s, i) => {
-            const done = i < readCount;
-            const active = i === readCount;
-            return (
-              <li key={s.label} className="flex items-start gap-3 border-b border-line py-3">
-                <span
-                  className={`grid h-6.5 w-6.5 shrink-0 place-items-center rounded-full text-[13px] font-extrabold ${
-                    done
-                      ? "bg-accent text-accent-ink"
-                      : active
-                        ? "animate-spin border-[3px] border-line border-t-accent-strong"
-                        : "bg-chip"
-                  }`}
-                >
-                  {done ? "✓" : ""}
-                </span>
-                <div>
-                  <b>{s.label}</b>
-                  <p className="text-sm text-muted">{done ? s.result : "…"}</p>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {issues.length ? "A photo could be better" : "Thanks, that helps"}
+          </h1>
+          <p className="text-base leading-7 text-neutral-700">
+            {issues.length
+              ? "Fixing this helps them bring the right parts, but you can continue if you can’t."
+              : `${questions.length ? "Next, a few quick questions about what we couldn’t see." : "That’s all we need from the photos."}`}
+          </p>
+        </div>
+        {issues.length ? (
+          <ul className="flex flex-col gap-3">
+            {issues.map((issue) => {
+              const index = photos.findIndex((p) => p.upload.status === "saved" && p.upload.id === issue.photoId);
+              return (
+                <li key={issue.photoId} className="flex gap-3 rounded-md border border-neutral-200 p-3">
+                  {index >= 0 ? (
+                    <div className="w-20 shrink-0">
+                      <PhotoImage photo={photos[index]} alt={`Photo ${index + 1}`} />
+                    </div>
+                  ) : null}
+                  <div className="space-y-1 text-sm">
+                    <p className="font-medium">{index >= 0 ? `Photo ${index + 1}` : "A photo"}</p>
+                    <p className="text-neutral-700">{issue.message}</p>
+                    {issue.requestedView ? <p className="text-neutral-600">Try: {issue.requestedView}</p> : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+        <SafetyNotice concern={analysis.view.urgentConcern} firstName={firstName} />
       </Screen>
     );
   }
 
   if (step.kind === "question") {
-    const q = questions[step.index];
-    if (!q) return <p className="p-6 text-muted">Loading questions…</p>;
-    const answer = answers[q.id];
-    const danger = q.dangerAnswer && answer === q.dangerAnswer;
+    const question = questions[step.index];
+    if (!question) {
+      return <p className="p-6 text-sm text-neutral-500">Loading questions…</p>;
+    }
     return (
-      <Screen
+      <QuestionStep
+        key={question.id}
         embedded={embedded}
-        back={() => setStep(step.index === 0 ? { kind: "photo", index: prompts.length - 1 } : { kind: "question", index: step.index - 1 })}
-        backLabel="Back"
-        corner="Almost done"
-        action={
-          <Primary
-            onClick={() =>
-              setStep(step.index + 1 < questions.length ? { kind: "question", index: step.index + 1 } : { kind: "describe" })
-            }
-          >
-            {answer ? "Next" : "Skip"}
-          </Primary>
+        question={question}
+        number={step.index + 1}
+        saved={answers[question.id]}
+        urgentConcern={view.urgentConcern}
+        firstName={firstName}
+        canAddPhoto={photos.length < INTAKE_PHOTO_MAX_COUNT}
+        photos={photos}
+        onAddPhoto={(file) => addPhotos([file])[0] ?? null}
+        onBack={() =>
+          setStep(step.index > 0 ? { kind: "question", index: step.index - 1 } : { kind: "reading" })
         }
-      >
-        <Because>{q.because}</Because>
-        <QuestionBody q={q} answer={answer} onAnswer={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))} />
-        {danger ? (
-          <div role="alert" className="mt-2 rounded-xl bg-danger-soft p-3 text-[15px] font-semibold text-danger">
-            ⚠ Turn the system off at the thermostat and stay away from the unit. If you see smoke or flames, call
-            911. We’ll mark this as urgent for {firstName}.
-          </div>
-        ) : null}
-      </Screen>
+        onSave={async (value) => {
+          const error = await saveAnswer(question, value);
+          if (!error) afterQuestions(step.index);
+          return error;
+        }}
+      />
     );
   }
 
-  if (step.kind === "describe") {
+  if (step.kind === "note") {
     return (
       <Screen
         embedded={embedded}
-        back={() => setStep({ kind: "question", index: Math.max(questions.length - 1, 0) })}
-        corner="Last one, optional"
+        back={() =>
+          setStep(questions.length ? { kind: "question", index: questions.length - 1 } : { kind: "reading" })
+        }
         action={<Primary onClick={() => setStep({ kind: "review" })}>Review and send</Primary>}
       >
-        <h1 className="font-display text-2xl font-bold leading-tight">Anything else {firstName} should know?</h1>
-        <p className="mb-3 mt-1.5 text-[15px] text-muted">In your own words. Your keyboard’s mic works here too.</p>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="intake-note" className="text-2xl font-semibold tracking-tight">
+            Anything else {firstName} should know?
+          </label>
+          <p className="text-base leading-7 text-neutral-700">Optional. In your own words.</p>
+        </div>
         <textarea
+          id="intake-note"
           value={note}
           onChange={(e) => setNote(e.target.value)}
+          rows={4}
+          maxLength={2000}
           placeholder="e.g. It stopped after the heat wave"
-          className="min-h-28 w-full rounded-xl border-[1.5px] border-line bg-white p-3 text-base"
+          className={`${inputClassName} h-auto py-2`}
         />
       </Screen>
     );
@@ -365,159 +625,558 @@ export function IntakeWizard({
     return (
       <Screen
         embedded={embedded}
-        back={() => setStep({ kind: "describe" })}
-        action={<Primary onClick={() => setStep({ kind: "done" })}>Send to {firstName}</Primary>}
+        back={() => setStep({ kind: "note" })}
+        action={
+          <>
+            <Primary onClick={() => void submit()} disabled={submitting}>
+              {submitting ? "Sending…" : `Send to ${firstName}`}
+            </Primary>
+            {submitError ? (
+              <p role="alert" className="text-sm text-red-700">
+                {submitError}
+              </p>
+            ) : null}
+          </>
+        }
       >
-        <h1 className="mt-2 font-display text-2xl font-bold">Look right?</h1>
-        <p className="mb-3 mt-1.5 text-[15px] text-muted">Tap anything to change it.</p>
-        <div className="mb-3 grid grid-cols-2 gap-2">
-          {photos.map((p, i) =>
-            p ? (
-              <button key={i} type="button" onClick={() => setStep({ kind: "photo", index: i })}>
-                {/* eslint-disable-next-line @next/next/no-img-element -- local blob preview */}
-                <img src={p.url} alt={prompts[i].title} className="aspect-[4/3] w-full rounded-xl border border-line object-cover" />
-              </button>
-            ) : (
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Look right?</h1>
+          <p className="text-base leading-7 text-neutral-700">Tap anything to change it.</p>
+        </div>
+        {photos.length > 0 ? (
+          <div className="grid grid-cols-2 gap-2">
+            {photos.map((photo, index) => (
               <button
-                key={i}
+                key={photo.key}
                 type="button"
-                onClick={() => setStep({ kind: "photo", index: i })}
-                className="grid aspect-[4/3] place-items-center rounded-xl border border-dashed border-line bg-chip text-sm text-muted"
+                onClick={() => setStep({ kind: "photos" })}
+                className="space-y-1 text-left"
               >
-                No photo · add
+                <PhotoImage photo={photo} alt={photo.caption || `Photo ${index + 1}`} />
+                {photo.caption ? <span className="block truncate text-sm text-neutral-600">{photo.caption}</span> : null}
               </button>
-            ),
-          )}
-        </div>
-        <div className="rounded-2xl border border-line bg-white px-4 text-[15px]">
+            ))}
+          </div>
+        ) : null}
+        <div className="divide-y divide-neutral-200 rounded-md border border-neutral-200">
+          {savedCount === 0 ? (
+            <ReviewRow
+              label="Your description"
+              value={description ? `“${description}”` : "Nothing added"}
+              onClick={() => setStep({ kind: "no-photo" })}
+            />
+          ) : null}
           {questions.map((q, i) => (
-            <ReviewRow key={q.id} label={q.short} value={answers[q.id] ?? "Skipped"} onClick={() => setStep({ kind: "question", index: i })} />
+            <ReviewRow
+              key={q.id}
+              label={q.label}
+              value={formatAnswer(answers[q.id])}
+              onClick={() => setStep({ kind: "question", index: i })}
+            />
           ))}
-          <ReviewRow label="Anything else" value={note ? `“${note}”` : "Nothing added"} onClick={() => setStep({ kind: "describe" })} />
+          <ReviewRow label="Anything else" value={note ? `“${note}”` : "Nothing added"} onClick={() => setStep({ kind: "note" })} />
         </div>
+        <p className="text-sm leading-6 text-neutral-500">
+          {questions.length ? "The questions were written by AI from what you sent; the answers are yours. " : ""}
+          Your photos and answers will be processed with AI and shared with {businessName} to prepare for the visit.
+        </p>
       </Screen>
     );
   }
 
   return (
     <Screen embedded={embedded}>
-      <div className="pt-8 text-center">
-        <div className="mx-auto grid h-19 w-19 place-items-center rounded-full bg-ok-soft text-4xl text-ok">✓</div>
-        <h1 className="mt-4 font-display text-[28px] font-bold">Sent to {firstName}</h1>
-        <p className="mt-1 text-muted">
-          They’ll be in touch{businessPhone ? ` from ${businessPhone}` : ""} to set a time.
-        </p>
-      </div>
-      <div className="mt-6 rounded-2xl border border-line bg-white p-4">
-        <span className="text-[11.5px] font-bold uppercase tracking-widest text-muted">What happens next</span>
-        <p className="mt-1.5">{firstName} reviews your photos and brings the likely part, so it can be one visit.</p>
-      </div>
-      <p className="mt-4 text-center text-sm text-muted">You can close this page.</p>
+      <h1 className="text-2xl font-semibold tracking-tight">Sent to {firstName}</h1>
+      <p className="text-base leading-7 text-neutral-700">
+        They’ll be in touch{businessPhone ? ` from ${businessPhone}` : ""} to set a time. {firstName} reviews what you
+        sent first so they can bring the likely part.
+      </p>
+      <p className="text-sm text-neutral-500">
+        This isn’t a confirmed appointment. You can close this page.
+      </p>
     </Screen>
   );
 }
 
 /* ---------- pieces ---------- */
 
+// Same plain layout as the rest of the app: one centered column, actions
+// below the content.
 function Screen({
   children,
   action,
   embedded,
   back,
-  backLabel = "← Back",
-  corner,
 }: {
   children: ReactNode;
   action?: ReactNode;
   back?: () => void;
-  backLabel?: string;
-  corner?: string;
   embedded?: boolean;
 }) {
   return (
-    <div className={`flex flex-col bg-page text-[17px] text-ink ${embedded ? "min-h-[640px] rounded-lg" : "min-h-dvh"}`}>
-      <div className="mx-auto w-full max-w-[520px] flex-1 px-5 pb-6 pt-5">
-        {back || corner ? (
-          <div className="mb-3 flex items-center justify-between">
-            {back ? (
-              <button type="button" onClick={back} className="font-bold text-accent-strong">
-                {backLabel.startsWith("←") ? backLabel : `← ${backLabel}`}
-              </button>
-            ) : (
-              <span />
-            )}
-            {corner ? <span className="text-sm text-muted">{corner}</span> : null}
-          </div>
+    <div className={`bg-white text-neutral-950 ${embedded ? "rounded-lg p-6" : "min-h-dvh px-6 py-10"}`}>
+      <div className={`mx-auto flex w-full max-w-md flex-col gap-6 ${embedded ? "" : "min-h-[calc(100dvh-5rem)] justify-center"}`}>
+        {back ? (
+          <button type="button" onClick={back} className="self-start text-sm text-neutral-600 underline">
+            ← Back
+          </button>
         ) : null}
         {children}
+        {action ? <div className="flex flex-col gap-3">{action}</div> : null}
       </div>
-      {action ? (
-        <div className="sticky bottom-0 border-t border-line bg-page">
-          <div className="mx-auto flex w-full max-w-[520px] gap-2 px-5 pb-5 pt-3">{action}</div>
-        </div>
-      ) : null}
     </div>
   );
 }
-
-const buttonBase =
-  "inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl px-5 font-bold disabled:cursor-not-allowed disabled:opacity-40";
 
 function Primary({
   children,
   onClick,
   disabled,
-  grow = true,
 }: {
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
-  grow?: boolean;
 }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className={`${buttonBase} bg-accent text-accent-ink ${grow ? "flex-[2]" : ""}`}>
+    <button type="button" onClick={onClick} disabled={disabled} className={primaryButtonClassName}>
       {children}
     </button>
   );
 }
 
+// General safety guidance only; never repair instructions (spec §6).
+function SafetyNotice({ concern, firstName }: { concern: string | null; firstName: string }) {
+  if (!concern) return null;
+  return (
+    <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">
+      Something you sent may need attention soon. If you smell gas, see smoke or sparks, or there’s water near
+      anything electrical, leave the area and call 911 or your utility’s emergency line. We’ve flagged this for{" "}
+      {firstName}.
+    </p>
+  );
+}
+
+function QuestionStep({
+  embedded,
+  question,
+  number,
+  saved,
+  urgentConcern,
+  firstName,
+  canAddPhoto,
+  photos,
+  onAddPhoto,
+  onBack,
+  onSave,
+}: {
+  embedded: boolean;
+  question: IntakeQuestion;
+  number: number;
+  saved: AnswerValue | undefined;
+  urgentConcern: string | null;
+  firstName: string;
+  canAddPhoto: boolean;
+  photos: Photo[];
+  /** Adds a photo to the intake; returns its key. */
+  onAddPhoto: (file: File) => string | null;
+  onBack: () => void;
+  /** Returns an error message, or null when saved. */
+  onSave: (value: AnswerValue) => Promise<string | null>;
+}) {
+  const [text, setText] = useState(saved?.kind === "text" ? saved.text : "");
+  const [choice, setChoice] = useState(saved?.kind === "choice" ? saved.choice : "");
+  const [choices, setChoices] = useState<string[]>(saved?.kind === "choices" ? saved.choices : []);
+  const [numberText, setNumberText] = useState(saved?.kind === "number" ? String(saved.value) : "");
+  const [photoKey, setPhotoKey] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const photo = photoKey ? photos.find((p) => p.key === photoKey) : undefined;
+  const options = question.type === "yes_no_unknown" ? [...YES_NO_UNKNOWN_OPTIONS] : question.options;
+
+  // The answer as currently entered, or null if nothing is entered yet.
+  function current(): AnswerValue | null {
+    switch (question.type) {
+      case "short_text":
+      case "long_text":
+        return text.trim() ? { kind: "text", text: text.trim() } : null;
+      case "single_select":
+      case "yes_no_unknown":
+        return choice ? { kind: "choice", choice } : null;
+      case "multi_select":
+        return choices.length ? { kind: "choices", choices } : null;
+      case "number_with_units": {
+        const value = Number(numberText);
+        return numberText.trim() && Number.isFinite(value) ? { kind: "number", value, unit: question.unit } : null;
+      }
+      case "photo_request":
+        if (photo?.upload.status === "saved") return { kind: "photo", photoId: photo.upload.id };
+        // Previews and the demo don't upload; any photo counts.
+        if (photo?.upload.status === "local") return { kind: "photo", photoId: photo.key };
+        if (saved?.kind === "photo") return saved;
+        return null;
+    }
+  }
+
+  const answer = current();
+  const photoPending = photo?.upload.status === "uploading";
+
+  async function save(value: AnswerValue) {
+    setSaving(true);
+    setError(null);
+    // Answers stay on screen if saving fails, so nothing typed is lost.
+    const failure = await onSave(value);
+    setSaving(false);
+    setError(failure);
+  }
+
+  return (
+    <Screen
+      embedded={embedded}
+      back={onBack}
+      action={
+        <>
+          <Primary
+            disabled={saving || photoPending || (question.required && !answer)}
+            onClick={() => void save(answer ?? { kind: "skipped" })}
+          >
+            {saving ? "Saving…" : answer || question.required ? "Next" : "Skip"}
+          </Primary>
+          {question.allowUnknown && question.type !== "yes_no_unknown" ? (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void save({ kind: "unknown" })}
+              className={secondaryButtonClassName}
+            >
+              I don’t know
+            </button>
+          ) : null}
+          {error ? (
+            <p role="alert" className="text-sm text-red-700">
+              {error}
+            </p>
+          ) : null}
+        </>
+      }
+    >
+      {/* No total: the number of questions can change as the customer answers. */}
+      <div className="space-y-1">
+        <p className="text-sm text-neutral-500">Question {number}</p>
+        <p className="text-xs text-neutral-500">Written by AI from what you sent.</p>
+      </div>
+      <fieldset className="flex flex-col gap-4">
+        <legend className="mb-2 text-2xl font-semibold tracking-tight">
+          {question.label}
+          {question.required ? <span className="sr-only"> (required)</span> : null}
+        </legend>
+        {question.help ? <p className="text-base leading-7 text-neutral-700">{question.help}</p> : null}
+        <p className="text-sm text-neutral-500">Why we’re asking: {question.reason}</p>
+
+        {question.type === "short_text" || question.type === "long_text" ? (
+          <>
+            <label htmlFor={`answer-${question.id}`} className="sr-only">
+              Your answer
+            </label>
+            {question.type === "short_text" ? (
+              <input
+                id={`answer-${question.id}`}
+                type="text"
+                value={text}
+                maxLength={200}
+                onChange={(e) => setText(e.target.value)}
+                className={inputClassName}
+              />
+            ) : (
+              <textarea
+                id={`answer-${question.id}`}
+                value={text}
+                rows={4}
+                maxLength={MAX_TEXT_ANSWER_LENGTH}
+                onChange={(e) => setText(e.target.value)}
+                className={`${inputClassName} h-auto py-2`}
+              />
+            )}
+          </>
+        ) : null}
+
+        {question.type === "single_select" || question.type === "yes_no_unknown" || question.type === "multi_select" ? (
+          <div className="flex flex-col gap-2">
+            {options.map((option) => {
+              const multi = question.type === "multi_select";
+              const selected = multi ? choices.includes(option) : choice === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() =>
+                    multi
+                      ? setChoices((prev) => (prev.includes(option) ? prev.filter((c) => c !== option) : [...prev, option]))
+                      : setChoice(option)
+                  }
+                  className={`flex h-11 items-center justify-between rounded-md border px-4 text-left text-sm font-medium ${
+                    selected ? "border-neutral-900 bg-neutral-100" : "border-neutral-300 bg-white"
+                  }`}
+                >
+                  {option}
+                  {selected ? <span aria-hidden>✓</span> : null}
+                </button>
+              );
+            })}
+            {question.type === "multi_select" ? <p className="text-sm text-neutral-500">Choose all that apply.</p> : null}
+          </div>
+        ) : null}
+
+        {question.type === "number_with_units" ? (
+          <div className="flex items-center gap-2">
+            <label htmlFor={`answer-${question.id}`} className="sr-only">
+              Your answer{question.unit ? ` in ${question.unit}` : ""}
+            </label>
+            <input
+              id={`answer-${question.id}`}
+              type="number"
+              inputMode="decimal"
+              value={numberText}
+              onChange={(e) => setNumberText(e.target.value)}
+              className={`${inputClassName} w-32`}
+            />
+            {question.unit ? <span className="text-sm text-neutral-700">{question.unit}</span> : null}
+          </div>
+        ) : null}
+
+        {question.type === "photo_request" ? (
+          <div className="flex flex-col gap-3">
+            {photo ? (
+              <>
+                <PhotoImage photo={photo} alt={question.label} />
+                <UploadStatus upload={photo.upload} onRetry={() => setPhotoKey(null)} />
+              </>
+            ) : saved?.kind === "photo" ? (
+              <p className="text-sm text-neutral-600">You already sent a photo for this.</p>
+            ) : null}
+            {canAddPhoto || photo ? (
+              <div className="flex flex-col gap-3">
+                <PhotoInput
+                  capture
+                  disabled={photoPending}
+                  variant={photo ? "secondary" : "primary"}
+                  onFiles={(files) => setPhotoKey(onAddPhoto(files[0]))}
+                >
+                  {photo ? "Take a different photo" : "Take a photo"}
+                </PhotoInput>
+                <PhotoInput disabled={photoPending} variant="secondary" onFiles={(files) => setPhotoKey(onAddPhoto(files[0]))}>
+                  Upload a photo
+                </PhotoInput>
+              </div>
+            ) : (
+              <p className="text-sm text-neutral-500">You’ve added the most photos you can. You can skip this one.</p>
+            )}
+          </div>
+        ) : null}
+      </fieldset>
+      <SafetyNotice concern={urgentConcern} firstName={firstName} />
+    </Screen>
+  );
+}
+
 function PhotoInput({
   children,
-  onFile,
+  onFiles,
   capture,
+  multiple,
   variant = "primary",
-  grow,
   disabled,
+  compact,
 }: {
   children: ReactNode;
-  onFile: (file: File) => void;
+  onFiles: (files: File[]) => void;
   capture?: boolean;
-  variant?: "primary" | "ghost";
-  grow?: boolean;
+  multiple?: boolean;
+  variant?: "primary" | "secondary";
   disabled?: boolean;
+  /** A small text-style control, for photo card actions. */
+  compact?: boolean;
 }) {
+  const className = compact
+    ? "text-sm underline"
+    : variant === "primary"
+      ? primaryButtonClassName
+      : secondaryButtonClassName;
   return (
     <label
       aria-disabled={disabled}
-      className={`${buttonBase} ${disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer"} ${grow ? "flex-[2]" : "flex-1"} ${
-        variant === "primary" ? "bg-accent text-accent-ink" : "border-[1.5px] border-line bg-white"
-      }`}
+      className={`${className} ${
+        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+      } has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-neutral-900/30`}
     >
       {children}
       <input
         type="file"
         disabled={disabled}
-        // JPEG first so iOS Safari converts HEIC (see docs/design/research).
+        multiple={multiple}
+        // JPEG first so iOS Safari converts HEIC on the phone (see
+        // docs/design/research); HEIC that still arrives is converted on the server.
         accept="image/jpeg,image/png,image/webp,image/*"
         {...(capture ? { capture: "environment" as const } : {})}
         className="sr-only"
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) onFile(file);
+          const files = Array.from(e.target.files ?? []);
+          if (files.length) onFiles(files);
           e.target.value = "";
         }}
       />
     </label>
+  );
+}
+
+function PhotoImage({ photo, alt }: { photo: Photo; alt: string }) {
+  return (
+    <div className="aspect-[4/3] w-full overflow-hidden rounded-md border border-neutral-200 bg-neutral-100">
+      {/* eslint-disable-next-line @next/next/no-img-element -- local blob or short-lived signed URL */}
+      <img
+        src={photo.url}
+        alt={alt}
+        style={photo.rotation ? { transform: `rotate(${photo.rotation}deg)` } : undefined}
+        className="size-full object-contain"
+      />
+    </div>
+  );
+}
+
+function PhotoCard({
+  photo,
+  index,
+  canRotate,
+  onCaption,
+  onCaptionDone,
+  onRotate,
+  onReplace,
+  onRemove,
+  onRetry,
+}: {
+  photo: Photo;
+  index: number;
+  canRotate: boolean;
+  onCaption: (caption: string) => void;
+  onCaptionDone: () => void;
+  onRotate: () => void;
+  onReplace: (file: File) => void;
+  onRemove: () => void;
+  onRetry: (failed: Extract<PhotoUpload, { status: "failed" }>) => void;
+}) {
+  const label = `Photo ${index + 1}`;
+  const busy = photo.busy !== null || photo.upload.status === "uploading";
+  const actionClassName = "text-sm underline disabled:no-underline disabled:opacity-50";
+  return (
+    <li className="flex flex-col gap-3 rounded-md border border-neutral-200 p-3">
+      <PhotoImage photo={photo} alt={photo.caption || label} />
+      <UploadStatus upload={photo.upload} onRetry={onRetry} />
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={`caption-${photo.key}`} className="text-sm font-medium">
+          What does this show? <span className="font-normal text-neutral-500">(optional)</span>
+        </label>
+        <input
+          id={`caption-${photo.key}`}
+          type="text"
+          value={photo.caption}
+          maxLength={INTAKE_CAPTION_MAX_LENGTH}
+          placeholder="e.g. Water under the sink"
+          onChange={(e) => onCaption(e.target.value)}
+          onBlur={onCaptionDone}
+          className={inputClassName}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className="text-sm font-medium text-neutral-700">{label}</span>
+        <button type="button" onClick={onRotate} disabled={!canRotate || busy} className={actionClassName}>
+          {photo.busy === "rotating" ? "Rotating…" : "Rotate"}
+        </button>
+        <PhotoInput compact onFiles={(files) => onReplace(files[0])} disabled={busy}>
+          Replace
+        </PhotoInput>
+        <button type="button" onClick={onRemove} disabled={busy} className={actionClassName}>
+          {photo.busy === "removing" ? "Removing…" : "Remove"}
+        </button>
+      </div>
+      {photo.error ? (
+        <p role="alert" className="text-sm text-red-700">
+          {photo.error}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+function NoPhotoStep({
+  embedded,
+  initial,
+  onBack,
+  onSave,
+}: {
+  embedded: boolean;
+  initial: string;
+  onBack: () => void;
+  /** Returns an error message, or null on success. */
+  onSave: (description: string) => Promise<string | null>;
+}) {
+  const [text, setText] = useState(initial);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  return (
+    <Screen
+      embedded={embedded}
+      back={onBack}
+      action={
+        <Primary
+          disabled={saving}
+          onClick={async () => {
+            if (!text.trim()) {
+              setError("Describe the problem so they know what to expect.");
+              return;
+            }
+            setSaving(true);
+            const failure = await onSave(text.trim());
+            setSaving(false);
+            setError(failure);
+          }}
+        >
+          {saving ? "Saving…" : "Continue"}
+        </Primary>
+      }
+    >
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="no-photo-description" className="text-2xl font-semibold tracking-tight">
+          Tell us what’s wrong
+        </label>
+        <p className="text-base leading-7 text-neutral-700">
+          No problem if you can’t take a photo. Describe what you see, hear, or smell, where it is, and when it
+          started.
+        </p>
+      </div>
+      <textarea
+        id="no-photo-description"
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setError(null);
+        }}
+        rows={6}
+        maxLength={INTAKE_DESCRIPTION_MAX_LENGTH}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? "no-photo-error" : undefined}
+        placeholder="e.g. The kitchen sink drains slowly and there’s water in the cabinet underneath. Started yesterday."
+        className={`${inputClassName} h-auto py-2`}
+      />
+      {error ? (
+        <p id="no-photo-error" role="alert" className="text-sm text-red-700">
+          {error}
+        </p>
+      ) : null}
+      <button type="button" onClick={onBack} className="self-start text-sm underline">
+        Add a photo instead
+      </button>
+    </Screen>
   );
 }
 
@@ -531,24 +1190,24 @@ function UploadStatus({
 }) {
   if (upload.status === "local") return null;
   if (upload.status === "saved") {
-    return <p className="mt-2 text-sm text-muted">Photo saved</p>;
+    return <p className="text-sm text-neutral-500">Photo saved</p>;
   }
   if (upload.status === "uploading") {
     const percent = Math.round(upload.progress * 100);
     return (
-      <div className="mt-2" aria-live="polite">
-        <p className="text-sm text-muted">{percent < 100 ? `Saving photo… ${percent}%` : "Saving photo…"}</p>
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-chip">
-          <div className="h-full bg-accent-strong transition-[width]" style={{ width: `${percent}%` }} />
+      <div aria-live="polite" className="space-y-1">
+        <p className="text-sm text-neutral-500">{percent < 100 ? `Saving photo… ${percent}%` : "Saving photo…"}</p>
+        <div className="h-1.5 overflow-hidden rounded-full bg-neutral-200">
+          <div className="h-full bg-neutral-900" style={{ width: `${percent}%` }} />
         </div>
       </div>
     );
   }
   return (
-    <div role="alert" className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-danger-soft p-3 text-[15px] text-danger">
+    <div role="alert" className="flex items-center justify-between gap-3 text-sm text-red-700">
       <span>{upload.error}</span>
       {upload.retryable ? (
-        <button type="button" onClick={() => onRetry(upload)} className="shrink-0 font-bold underline">
+        <button type="button" onClick={() => onRetry(upload)} className="shrink-0 underline">
           Try again
         </button>
       ) : null}
@@ -560,7 +1219,6 @@ function UploadStatus({
 function uploadPhoto(
   token: string,
   file: File,
-  promptId: string,
   replaces: string | null,
   onProgress: (progress: number) => void,
 ): Promise<{ ok: true; photo: IntakePhoto } | { ok: false; error: string; retryable: boolean }> {
@@ -584,80 +1242,16 @@ function uploadPhoto(
 
     const form = new FormData();
     form.append("photo", file);
-    form.append("prompt", promptId);
     if (replaces) form.append("replaces", replaces);
     xhr.send(form);
   });
 }
 
-function QuestionBody({
-  q,
-  answer,
-  onAnswer,
-}: {
-  q: IntakeQuestion;
-  answer?: string;
-  onAnswer: (value: string) => void;
-}) {
-  return (
-    <fieldset>
-      <legend className="font-display text-2xl font-bold leading-tight">{q.prompt}</legend>
-      {q.help ? <p className="mb-4 mt-1.5 text-[15px] text-muted">{q.help}</p> : <div className="mb-4" />}
-      <div className="flex flex-col gap-2.5">
-        {q.options.map((option) => {
-          const selected = answer === option;
-          return (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={selected}
-              onClick={() => onAnswer(option)}
-              className={`flex min-h-[58px] items-center justify-between rounded-2xl border-[1.5px] px-4 text-left font-semibold ${
-                selected ? "border-accent-strong bg-accent-soft" : "border-line bg-white"
-              }`}
-            >
-              {option}
-              {selected ? <span className="font-extrabold text-accent-strong">✓</span> : null}
-            </button>
-          );
-        })}
-      </div>
-    </fieldset>
-  );
-}
-
-function Because({ children }: { children: ReactNode }) {
-  return (
-    <p className="mb-3 flex gap-2 rounded-xl bg-accent-soft px-3 py-2.5 text-sm">
-      <span aria-hidden>💡</span>
-      <span>{children}</span>
-    </p>
-  );
-}
-
-function Effort({ big, label }: { big: string; label: string }) {
-  return (
-    <div className="rounded-2xl border border-line bg-white p-3">
-      <b className="block font-display text-2xl">{big}</b>
-      {label}
-    </div>
-  );
-}
-
 function ReviewRow({ label, value, onClick }: { label: string; value: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="flex w-full justify-between gap-3 border-t border-line py-3 text-left first:border-t-0">
-      <span className="text-muted">{label}</span>
-      <span className="text-right font-bold">{value}</span>
+    <button type="button" onClick={onClick} className="flex w-full justify-between gap-3 px-4 py-3 text-left text-sm">
+      <span className="text-neutral-600">{label}</span>
+      <span className="text-right font-medium">{value}</span>
     </button>
   );
-}
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter((w) => /^[A-Za-z]/.test(w))
-    .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
-    .join("");
 }

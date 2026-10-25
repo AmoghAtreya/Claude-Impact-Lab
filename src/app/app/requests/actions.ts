@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
+import { retryBrief, runBriefJob } from "@/lib/intake-ai";
 import { newIntakeLink } from "@/lib/intake-links";
 import { processStorageDeletions } from "@/lib/storage-cleanup";
 import { createClient } from "@/lib/supabase/server";
@@ -210,6 +212,17 @@ export async function markIntakeLinkShared(requestId: string) {
 
   revalidatePath(`/app/requests/${requestId}`);
   revalidatePath("/app/requests");
+}
+
+// Starts a fresh brief after a failure. The id comes from the client, so
+// retryBrief re-checks it belongs to the caller's workspace.
+export async function retryBriefAction(requestId: string) {
+  const { workspace } = await requireWorkspace();
+  const result = await retryBrief(workspace.id, requestId);
+  if (!result.ok) return { error: result.error };
+  after(() => runBriefJob(result.jobId));
+  revalidatePath(`/app/requests/${requestId}`);
+  return {};
 }
 
 export async function revokeIntakeLink(requestId: string) {
