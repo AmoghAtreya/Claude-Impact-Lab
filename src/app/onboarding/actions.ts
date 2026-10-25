@@ -2,11 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { processAvatar, saveAvatar } from "@/lib/avatar";
 import { getCurrentWorkspace } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { TRADE_OTHER_MAX_LENGTH, TRADES, type Trade } from "@/lib/trades";
 
 export type OnboardingField =
+  | "avatar"
   | "name"
   | "trade"
   | "tradeOther"
@@ -75,7 +77,7 @@ export async function createWorkspace(
   _prevState: OnboardingFormState,
   formData: FormData,
 ): Promise<OnboardingFormState> {
-  const { workspace } = await getCurrentWorkspace();
+  const { user, workspace } = await getCurrentWorkspace();
   if (workspace) {
     redirect("/app");
   }
@@ -89,14 +91,38 @@ export async function createWorkspace(
     timezone: String(formData.get("timezone") ?? ""),
   };
 
+  const avatarFile = formData.get("avatar");
+  const avatar =
+    avatarFile instanceof File && avatarFile.size > 0
+      ? await processAvatar(avatarFile)
+      : null;
+
   const parsed = workspaceSchema.safeParse(values);
-  if (!parsed.success) {
+  if (!parsed.success || (avatar && !avatar.ok)) {
     const fieldErrors: OnboardingFormState["fieldErrors"] = {};
-    for (const issue of parsed.error.issues) {
+    for (const issue of parsed.error?.issues ?? []) {
       const field = issue.path[0] as OnboardingField;
       fieldErrors[field] ??= issue.message;
     }
+    if (avatar && !avatar.ok) {
+      fieldErrors.avatar = avatar.error;
+    }
     return { fieldErrors, values };
+  }
+
+  // Upload before creating the workspace so a failure leaves nothing
+  // half-finished; a retry overwrites the same file.
+  if (avatar) {
+    const saved = await saveAvatar(user.id, avatar.data);
+    if (!saved.ok) {
+      return {
+        fieldErrors: {
+          avatar:
+            "We couldn't upload your picture. Try again, or remove it and add one later.",
+        },
+        values,
+      };
+    }
   }
 
   const supabase = await createClient();

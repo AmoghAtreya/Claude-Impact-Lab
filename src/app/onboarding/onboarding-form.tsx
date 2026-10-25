@@ -1,12 +1,25 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import {
+  startTransition,
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 import {
   fieldErrorClassName,
   inputClassName,
   labelClassName,
   primaryButtonClassName,
 } from "@/app/ui/form-styles";
+import {
+  AVATAR_ACCEPT,
+  AVATAR_ACCEPTED_TYPES,
+  AVATAR_MAX_BYTES,
+} from "@/lib/avatar-rules";
 import { TRADE_OTHER_MAX_LENGTH, TRADES } from "@/lib/trades";
 import {
   createWorkspace,
@@ -26,6 +39,18 @@ export function OnboardingForm({ defaultEmail, timeZones }: OnboardingFormProps)
   >(createWorkspace, {});
   const timeZoneRef = useRef<HTMLSelectElement>(null);
   const [trade, setTrade] = useState(state.values?.trade ?? TRADES[0].value);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  // undefined: show the server's avatar error, if any. null: the user has
+  // changed the picture since, so hide it. string: a local error.
+  const [avatarError, setAvatarError] = useState<string | null | undefined>();
+
+  // Release the preview's object URL when it's replaced or on unmount.
+  useEffect(() => {
+    return () => {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    };
+  }, [avatarPreview]);
 
   // Preselect the browser's timezone. Done after hydration because the
   // server can't know it.
@@ -37,7 +62,46 @@ export function OnboardingForm({ defaultEmail, timeZones }: OnboardingFormProps)
     }
   }, [timeZones]);
 
+  function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    setAvatarError(null);
+    if (!file) {
+      setAvatarPreview(null);
+      return;
+    }
+    if (!AVATAR_ACCEPTED_TYPES.includes(file.type)) {
+      event.target.value = "";
+      setAvatarPreview(null);
+      setAvatarError("Use a JPEG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      event.target.value = "";
+      setAvatarPreview(null);
+      setAvatarError("Choose a picture smaller than 5 MB.");
+      return;
+    }
+    setAvatarPreview(URL.createObjectURL(file));
+  }
+
+  function removeAvatar() {
+    if (avatarInputRef.current) avatarInputRef.current.value = "";
+    setAvatarPreview(null);
+    setAvatarError(null);
+  }
+
+  // Submitting manually skips React's automatic form reset, so a failed
+  // submit keeps the chosen picture and every other field.
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAvatarError(undefined);
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => formAction(formData));
+  }
+
   const values = state.values ?? {};
+  const avatarMessage =
+    avatarError === undefined ? state.fieldErrors?.avatar : avatarError;
   const fieldError = (field: OnboardingField) =>
     state.fieldErrors?.[field] ? (
       <p id={`${field}-error`} className={fieldErrorClassName}>
@@ -48,7 +112,75 @@ export function OnboardingForm({ defaultEmail, timeZones }: OnboardingFormProps)
     state.fieldErrors?.[field] ? `${field}-error` : undefined;
 
   return (
-    <form action={formAction} className="flex flex-col gap-5" noValidate>
+    <form
+      action={formAction}
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-5"
+      noValidate
+    >
+      <div className="flex flex-col gap-1.5">
+        <span id="avatar-label" className={labelClassName}>
+          Profile picture{" "}
+          <span className="font-normal text-neutral-500">(optional)</span>
+        </span>
+        <div className="flex items-center gap-4">
+          <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-neutral-200 bg-neutral-100 text-neutral-400">
+            {avatarPreview ? (
+              // eslint-disable-next-line @next/next/no-img-element -- local blob preview
+              <img
+                src={avatarPreview}
+                alt="Selected profile picture"
+                className="size-full object-cover"
+              />
+            ) : (
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="size-8"
+                fill="currentColor"
+              >
+                <path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2.25c-4.14 0-7.5 2.35-7.5 5.25 0 .41.34.75.75.75h13.5c.41 0 .75-.34.75-.75 0-2.9-3.36-5.25-7.5-5.25Z" />
+              </svg>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              ref={avatarInputRef}
+              id="avatar"
+              name="avatar"
+              type="file"
+              accept={AVATAR_ACCEPT}
+              onChange={handleAvatarChange}
+              aria-labelledby="avatar-label avatar-button"
+              aria-invalid={Boolean(avatarMessage)}
+              aria-describedby={avatarMessage ? "avatar-error" : undefined}
+              className="peer sr-only"
+            />
+            <label
+              id="avatar-button"
+              htmlFor="avatar"
+              className="inline-flex h-9 cursor-pointer items-center rounded-md border border-neutral-300 px-3 text-sm font-medium peer-focus-visible:ring-2 peer-focus-visible:ring-neutral-900/30"
+            >
+              {avatarPreview ? "Change picture" : "Add picture"}
+            </label>
+            {avatarPreview ? (
+              <button
+                type="button"
+                onClick={removeAvatar}
+                className="text-sm underline"
+              >
+                Remove
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {avatarMessage ? (
+          <p id="avatar-error" className={fieldErrorClassName}>
+            {avatarMessage}
+          </p>
+        ) : null}
+      </div>
+
       <div className="flex flex-col gap-1.5">
         <label htmlFor="name" className={labelClassName}>
           Business name

@@ -1,5 +1,7 @@
+import Image from "next/image";
 import { Suspense } from "react";
 import { logout } from "@/app/auth/actions";
+import { getAvatarUrl } from "@/lib/avatar";
 import { tradeLabel } from "@/lib/trades";
 import { requireWorkspace } from "@/lib/workspace";
 
@@ -25,9 +27,21 @@ export default function LoggedInPage() {
 
 async function WorkspaceSummary() {
   const { user, workspace } = await requireWorkspace();
+  const avatarUrl = await getAvatarUrl(user.id);
   const trade = tradeLabel(workspace.trade, workspace.tradeOther);
   return (
     <>
+      {avatarUrl ? (
+        // Signed URLs expire, so skip the image optimizer's caching.
+        <Image
+          src={avatarUrl}
+          alt=""
+          width={64}
+          height={64}
+          unoptimized
+          className="size-16 rounded-full border border-neutral-200 object-cover"
+        />
+      ) : null}
       <h1 className="text-3xl font-semibold tracking-tight">
         {workspace.name}
       </h1>
