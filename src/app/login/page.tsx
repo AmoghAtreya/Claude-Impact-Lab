@@ -2,26 +2,32 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { login } from "@/app/auth/actions";
 import { AuthForm } from "@/app/auth/auth-form";
+import { AuthShell } from "@/app/auth/auth-shell";
+import { textLinkClassName } from "@/app/ui/form-styles";
 
 export default function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 px-6 py-16">
-      <h1 className="text-3xl font-semibold tracking-tight">Log in</h1>
+    <AuthShell
+      title="Log in"
+      intro="Your requests and briefs are waiting."
+      footer={
+        <>
+          <Link href="/forgot-password" className={textLinkClassName}>
+            Forgot your password?
+          </Link>
+          <p>
+            New here?{" "}
+            <Link href="/signup" className={textLinkClassName}>
+              Create an account
+            </Link>
+          </p>
+        </>
+      }
+    >
       <Suspense>
         <LoginForm searchParams={searchParams} />
       </Suspense>
-      <div className="flex flex-col gap-2 text-sm text-neutral-700">
-        <Link href="/forgot-password" className="underline">
-          Forgot your password?
-        </Link>
-        <p>
-          New here?{" "}
-          <Link href="/signup" className="underline">
-            Create an account
-          </Link>
-        </p>
-      </div>
-    </main>
+    </AuthShell>
   );
 }
 

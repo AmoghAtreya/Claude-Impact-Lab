@@ -1,33 +1,28 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { logout } from "@/app/auth/actions";
+import { AuthShell } from "@/app/auth/auth-shell";
 import { getCurrentWorkspace } from "@/lib/workspace";
 import { TIME_ZONES } from "@/lib/workspace-schema";
 import { OnboardingForm } from "./onboarding-form";
 
 export default function OnboardingPage() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 px-6 py-16">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Set up your business
-        </h1>
-        <p className="text-base leading-7 text-neutral-700">
-          Customers see your business name and contact details when they open
-          an intake link.
-        </p>
-      </div>
-      <Suspense
-        fallback={<p className="text-base leading-7 text-neutral-500">Loading…</p>}
-      >
+    <AuthShell
+      title="Set up your shop"
+      intro="About a minute. Customers see your business name and contact details when they open a link."
+      footer={
+        <form action={logout}>
+          <button type="submit" className="min-h-10 text-sm font-bold text-accent-strong">
+            Log out
+          </button>
+        </form>
+      }
+    >
+      <Suspense fallback={<p className="text-base leading-7 text-muted">Loading…</p>}>
         <Onboarding />
       </Suspense>
-      <form action={logout}>
-        <button type="submit" className="text-sm underline">
-          Log out
-        </button>
-      </form>
-    </main>
+    </AuthShell>
   );
 }
 

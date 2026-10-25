@@ -102,13 +102,13 @@ export function IntakeLinkPanel({
   return (
     <section
       aria-labelledby="intake-link-heading"
-      className="flex flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-5 sm:p-6"
+      className="flex flex-col gap-4 rounded-2xl border border-line bg-white p-5 sm:p-6"
     >
       <div className="space-y-1">
         <h2 id="intake-link-heading" className="text-base font-semibold">
           Customer intake link
         </h2>
-        <p className="text-sm leading-6 text-neutral-700">
+        <p className="text-sm leading-6 text-muted">
           Send this link by text, WhatsApp, or email. Anyone with it can open
           this intake, so share it only with the customer.
         </p>
@@ -121,7 +121,7 @@ export function IntakeLinkPanel({
             value={url}
             aria-label="Intake link"
             onFocus={(event) => event.currentTarget.select()}
-            className="h-10 w-full rounded-md border border-neutral-300 bg-neutral-50 px-3 font-mono text-sm"
+            className="h-12 w-full rounded-xl border-[1.5px] border-line bg-page px-3 font-mono text-sm"
           />
           <div className="flex flex-wrap gap-3">
             <button type="button" onClick={copy} className={primaryButtonClassName}>
@@ -139,17 +139,17 @@ export function IntakeLinkPanel({
               Preview
             </Link>
           </div>
-          <p className="text-sm text-neutral-600">Expires {expiresLabel}.</p>
+          <p className="text-sm text-muted">Expires {expiresLabel}.</p>
         </>
       ) : (
-        <p className="text-sm text-neutral-800">
+        <p className="text-sm text-ink">
           {expired
             ? `This link expired ${expiresLabel}. Create a new one to send the customer.`
             : "This request has no active link."}
         </p>
       )}
 
-      <p aria-live="polite" className="text-sm text-red-700">
+      <p aria-live="polite" className="text-sm text-danger">
         {error}
       </p>
 
@@ -158,7 +158,7 @@ export function IntakeLinkPanel({
           type="button"
           onClick={regenerate}
           disabled={regenerating || revoking}
-          className="text-sm underline disabled:opacity-60"
+          className="min-h-10 text-sm font-bold text-accent-strong disabled:opacity-40"
         >
           {regenerating ? "Creating new link…" : "Create a new link"}
         </button>
@@ -167,7 +167,7 @@ export function IntakeLinkPanel({
             type="button"
             onClick={revoke}
             disabled={regenerating || revoking}
-            className="text-sm text-red-700 underline disabled:opacity-60"
+            className="min-h-10 text-sm font-bold text-danger disabled:opacity-40"
           >
             {revoking ? "Revoking…" : "Revoke link"}
           </button>

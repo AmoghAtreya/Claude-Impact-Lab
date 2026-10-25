@@ -1,21 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { BriefPhoto, ServiceBrief } from "@/lib/brief-types";
+import type { BriefPhoto } from "@/lib/brief-types";
+
+export type ViewerNote = { photoId: string; x: number | null; y: number | null; text: string; supports?: string };
+export type ViewerAnswerNote = { quote: string; supports?: string };
 
 // Full-screen photo viewer: numbered pins on the photo plus matching notes,
 // with an "AI notes / Plain photo" toggle. Pins are approximate; the notes
 // are the source of truth. See docs/design/README.md.
 export function PhotoViewer({
   photos,
-  brief,
+  notes: allNotes,
+  answerNotes: allAnswerNotes,
   customerName,
   index,
   onIndexChange,
   onClose,
 }: {
   photos: BriefPhoto[];
-  brief: ServiceBrief;
+  notes: ViewerNote[];
+  /** Evidence from the customer's answers, shown with the first photo. */
+  answerNotes: ViewerAnswerNote[];
   customerName: string;
   /** Photo to show, or null when closed. */
   index: number | null;
@@ -39,9 +45,9 @@ export function PhotoViewer({
   }, [index]);
 
   const photo = index !== null ? photos[index] : null;
-  const notes = photo ? brief.photoNotes.filter((n) => n.photoId === photo.id) : [];
+  const notes = photo ? allNotes.filter((n) => n.photoId === photo.id) : [];
   // Answer notes aren't tied to a photo; show them with the first one.
-  const answerNotes = index === 0 ? brief.answerNotes : [];
+  const answerNotes = index === 0 ? allAnswerNotes : [];
 
   return (
     <dialog
@@ -138,9 +144,11 @@ export function PhotoViewer({
                       </ul>
                     </>
                   ) : null}
-                  <p className="mt-3 text-sm text-[#a9afb6]">
-                    Pin positions are approximate. The notes are the source of truth.
-                  </p>
+                  {notes.some((n) => n.x !== null) ? (
+                    <p className="mt-3 text-sm text-[#a9afb6]">
+                      Pin positions are approximate. The notes are the source of truth.
+                    </p>
+                  ) : null}
                 </>
               ) : (
                 <p className="text-sm text-[#a9afb6]">Plain photo, exactly as {customerName} sent it.</p>
@@ -181,7 +189,7 @@ function Note({
 }: {
   marker: string;
   text: string;
-  supports: string;
+  supports?: string;
   answer?: boolean;
 }) {
   return (
@@ -196,7 +204,7 @@ function Note({
       </span>
       <div>
         {text}
-        <small className="mt-1 block text-sm text-[#a9afb6]">{supports}</small>
+        {supports ? <small className="mt-1 block text-sm text-[#a9afb6]">{supports}</small> : null}
       </div>
     </li>
   );

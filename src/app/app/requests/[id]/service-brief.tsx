@@ -158,7 +158,8 @@ export function ServiceBrief({
 
       <PhotoViewer
         photos={photos}
-        brief={brief}
+        notes={brief.photoNotes}
+        answerNotes={brief.answerNotes}
         customerName={customerName}
         index={viewing}
         onIndexChange={setViewing}

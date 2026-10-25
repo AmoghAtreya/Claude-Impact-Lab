@@ -14,6 +14,7 @@ import {
   REVIEW_STATUS_LABELS,
   searchServiceRequests,
   type AnalysisStatus,
+  type IntakeStatus,
   type ListedServiceRequest,
   type RequestListParams,
 } from "@/lib/service-requests";
@@ -26,15 +27,15 @@ export default function RequestsPage({
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Requests</h1>
+        <h1 className="font-display text-[28px] font-extrabold tracking-tight">Requests</h1>
         <Link href="/app/requests/new" className={primaryButtonClassName}>
-          New request
+          + New request
         </Link>
       </div>
       <Suspense fallback={null}>
         <DeletedNotice searchParams={searchParams} />
       </Suspense>
-      <Suspense fallback={<p className="text-sm text-neutral-500">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <RequestList searchParams={searchParams} />
       </Suspense>
     </main>
@@ -78,9 +79,9 @@ async function RequestList({
   // No requests at all: skip the filters and point at the first action.
   if (total === 0 && !filtered) {
     return (
-      <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-neutral-300 bg-white p-6">
-        <h2 className="text-base font-semibold">No requests yet</h2>
-        <p className="text-sm leading-6 text-neutral-700">
+      <div className="flex flex-col items-start gap-3 rounded-2xl border border-dashed border-line bg-white p-6">
+        <h2 className="font-display text-lg font-bold">No requests yet</h2>
+        <p className="text-sm leading-6 text-muted">
           Create a request for a customer to get a private link you can send by
           text, WhatsApp, or email.
         </p>
@@ -116,23 +117,23 @@ async function RequestList({
         showClear={filtered || params.sort !== "created"}
       />
 
-      <p aria-live="polite" className="text-sm text-neutral-600">
+      <p aria-live="polite" className="text-sm text-muted">
         {total === 1 ? "1 request" : `${total} requests`}
         {filtered ? " match your filters" : ""}
       </p>
 
       {requests.length === 0 ? (
-        <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-neutral-300 bg-white p-6">
-          <h2 className="text-base font-semibold">No matching requests</h2>
-          <p className="text-sm leading-6 text-neutral-700">
+        <div className="flex flex-col items-start gap-2 rounded-2xl border border-dashed border-line bg-white p-6">
+          <h2 className="font-display text-lg font-bold">No matching requests</h2>
+          <p className="text-sm leading-6 text-muted">
             Try a different search or fewer filters.
           </p>
-          <Link href="/app/requests" className="text-sm underline">
+          <Link href="/app/requests" className="text-sm font-bold text-accent-strong underline">
             Clear filters
           </Link>
         </div>
       ) : (
-        <ul className="divide-y divide-neutral-200 overflow-hidden rounded-lg border border-neutral-200 bg-white">
+        <ul className="flex flex-col gap-2.5">
           {requests.map((request) => (
             <RequestRow
               key={request.id}
@@ -151,13 +152,23 @@ async function RequestList({
   );
 }
 
-const ANALYSIS_TONES: Record<AnalysisStatus, string> = {
-  not_started: "bg-neutral-100 text-neutral-600",
-  pending: "bg-sky-50 text-sky-800",
-  running: "bg-sky-50 text-sky-800",
-  succeeded: "bg-emerald-50 text-emerald-800",
-  failed: "bg-red-50 text-red-800",
+// Status pills: grey = waiting, green = ready, red only for failures.
+const INTAKE_TONES: Record<IntakeStatus, string> = {
+  draft: "bg-wait-soft text-wait",
+  shared: "bg-wait-soft text-wait",
+  in_progress: "bg-accent-soft text-accent-strong",
+  submitted: "bg-ok-soft text-ok",
 };
+
+const ANALYSIS_TONES: Record<AnalysisStatus, string> = {
+  not_started: "bg-wait-soft text-wait",
+  pending: "bg-wait-soft text-wait",
+  running: "bg-accent-soft text-accent-strong",
+  succeeded: "bg-ok-soft text-ok",
+  failed: "bg-danger-soft text-danger",
+};
+
+const pillClassName = "rounded-lg px-2 py-0.5 text-xs font-bold";
 
 function RequestRow({
   request,
@@ -168,7 +179,7 @@ function RequestRow({
   sort: RequestListParams["sort"];
   format: (iso: string) => string;
 }) {
-  // Show the timestamp the list is sorted by, plus last updated.
+  // Show the timestamp the list is sorted by.
   const sortedTime =
     sort === "activity"
       ? `Active ${format(request.lastActivityAt)}`
@@ -177,42 +188,38 @@ function RequestRow({
           ? `Submitted ${format(request.submittedAt)}`
           : "Not submitted"
         : `Created ${format(request.createdAt)}`;
+  // Analysis only means something once the customer has submitted.
+  const showAnalysis = request.intakeStatus === "submitted";
 
   return (
     <li>
       <Link
         href={`/app/requests/${request.id}`}
-        className="flex flex-col gap-2 px-4 py-3 hover:bg-neutral-50 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+        className="flex min-h-[84px] flex-col gap-1.5 rounded-2xl border-[1.5px] border-line bg-white p-4 hover:border-ink"
       >
-        <div className="min-w-0 space-y-1">
-          <p className="truncate font-medium">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="truncate font-bold">
             {request.customerName}{" "}
-            <span className="font-normal text-neutral-500">
-              {requestReference(request.number)}
-            </span>
+            <span className="font-normal text-muted">{requestReference(request.number)}</span>
           </p>
-          <p className="truncate text-sm text-neutral-600">
-            {request.serviceAddress ?? "No address yet"}
-          </p>
-          <div className="flex flex-wrap gap-1.5 pt-0.5 text-xs font-medium">
-            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-800">
-              {INTAKE_STATUS_LABELS[request.intakeStatus]}
-            </span>
-            <span
-              className={`rounded-full px-2 py-0.5 ${ANALYSIS_TONES[request.analysisStatus]}`}
-            >
+          <span className="shrink-0 text-xs text-muted">{sortedTime}</span>
+        </div>
+        <p className="truncate text-sm text-muted">{request.serviceAddress ?? "No address yet"}</p>
+        <div className="flex flex-wrap gap-1.5 pt-0.5">
+          {showAnalysis ? (
+            <span className={`${pillClassName} ${ANALYSIS_TONES[request.analysisStatus]}`}>
               {ANALYSIS_STATUS_LABELS[request.analysisStatus]}
             </span>
-            {request.reviewStatus !== "unreviewed" ? (
-              <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-800">
-                {REVIEW_STATUS_LABELS[request.reviewStatus]}
-              </span>
-            ) : null}
-          </div>
-        </div>
-        <div className="shrink-0 text-sm text-neutral-500 sm:text-right">
-          <p>Updated {format(request.updatedAt)}</p>
-          <p>{sortedTime}</p>
+          ) : (
+            <span className={`${pillClassName} ${INTAKE_TONES[request.intakeStatus]}`}>
+              {INTAKE_STATUS_LABELS[request.intakeStatus]}
+            </span>
+          )}
+          {request.reviewStatus !== "unreviewed" ? (
+            <span className={`${pillClassName} bg-chip text-ink`}>
+              {REVIEW_STATUS_LABELS[request.reviewStatus]}
+            </span>
+          ) : null}
         </div>
       </Link>
     </li>
@@ -238,9 +245,9 @@ function Pagination({
   pageCount: number;
 }) {
   const linkClassName =
-    "inline-flex h-9 items-center rounded-md border border-neutral-300 bg-white px-3 text-sm font-medium";
+    "inline-flex min-h-11 items-center rounded-xl border-[1.5px] border-line bg-white px-4 text-sm font-bold";
   const disabledClassName =
-    "inline-flex h-9 items-center rounded-md border border-neutral-200 px-3 text-sm text-neutral-400";
+    "inline-flex min-h-11 items-center rounded-xl border-[1.5px] border-line px-4 text-sm text-muted/70";
   const { page } = params;
 
   return (
@@ -257,7 +264,7 @@ function Pagination({
           Previous
         </span>
       )}
-      <p className="text-sm text-neutral-600">
+      <p className="text-sm text-muted">
         Page {page} of {pageCount}
       </p>
       {page < pageCount ? (

@@ -58,7 +58,7 @@ export const serviceBriefSchema = z.object({
 export type ServiceBrief = z.infer<typeof serviceBriefSchema>;
 
 /** A customer photo as the brief displays it. */
-export type BriefPhoto = { id: string; title: string; url: string; width: number; height: number };
+export type BriefPhoto = { id: string; title: string; url: string; width?: number; height?: number };
 
 /** One saved answer, labeled for the brief. */
 export type BriefAnswer = { questionId: string; short: string; answer: string };

@@ -292,6 +292,16 @@ function toQuestion(row: QuestionRow): IntakeQuestion {
   };
 }
 
+// What the AI read, for the customer's "We read…" confirmation: equipment
+// first, then a visible observation or two. Never causes or repair advice.
+function seenLines(result: StoredAnalysis) {
+  const equipment = result.equipment.map((e) =>
+    [[e.make, e.description].filter(Boolean).join(" "), e.model ? `model ${e.model}` : null].filter(Boolean).join(" · "),
+  );
+  const observed = result.visible_observations.map((o) => o.observation);
+  return [...equipment, ...observed].filter(Boolean).slice(0, 3);
+}
+
 async function analysisView(analysisId: string, result: StoredAnalysis): Promise<IntakeAnalysisView> {
   const { data } = await createAdminClient()
     .from("intake_questions")
@@ -299,6 +309,7 @@ async function analysisView(analysisId: string, result: StoredAnalysis): Promise
     .eq("analysis_id", analysisId)
     .order("position");
   return {
+    seen: seenLines(result),
     questions: ((data ?? []) as QuestionRow[]).map(toQuestion),
     photoIssues: result.photo_issues.map(({ photoId, message, requestedView }) => ({ photoId, message, requestedView })),
     urgentConcern: result.urgent_concern,
