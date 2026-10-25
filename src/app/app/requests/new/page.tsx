@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { requireWorkspace } from "@/lib/workspace";
-import { NewRequestForm } from "./new-request-form";
+import { createServiceRequest } from "../actions";
+import { RequestForm } from "../request-form";
 
 export default function NewRequestPage() {
   return (
@@ -31,9 +32,24 @@ export default function NewRequestPage() {
 async function Form() {
   const { workspace } = await requireWorkspace();
   return (
-    <NewRequestForm
-      defaultTrade={workspace.trade}
-      defaultTradeOther={workspace.tradeOther}
+    <RequestForm
+      action={createServiceRequest}
+      initialValues={{
+        customerName: "",
+        customerPhone: "",
+        customerEmail: "",
+        serviceAddress: "",
+        trade: workspace.trade,
+        tradeOther: workspace.tradeOther ?? "",
+        issueDescription: "",
+      }}
+      workspaceTrade={{
+        trade: workspace.trade,
+        tradeOther: workspace.tradeOther,
+      }}
+      submitLabel="Create request and link"
+      pendingLabel="Creating…"
+      cancelHref="/app/requests"
     />
   );
 }

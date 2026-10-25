@@ -4,7 +4,6 @@ import { hashIntakeToken, isIntakeToken } from "@/lib/intake-links";
 import { getIntakePhotos } from "@/lib/intake-photos";
 import { createClient } from "@/lib/supabase/server";
 import { IntakeWelcome } from "../intake-welcome";
-import { PhotoIntake } from "../photo-intake";
 
 // Keep the token out of Referer headers and search engines.
 export const metadata: Metadata = {
@@ -19,13 +18,12 @@ type LinkRow = {
   business_email: string | null;
   business_phone: string | null;
   customer_name: string;
-  customer_description: string | null;
 };
 
 export default function IntakePage({ params }: PageProps<"/i/[token]">) {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-10">
-      <Suspense fallback={<p className="text-sm text-neutral-500">Loading…</p>}>
+    <main className="min-h-dvh">
+      <Suspense fallback={<p className="p-6 text-sm text-neutral-500">Loading…</p>}>
         <Intake params={params} />
       </Suspense>
     </main>
@@ -53,14 +51,9 @@ async function Intake({ params }: Pick<PageProps<"/i/[token]">, "params">) {
         <IntakeWelcome
           businessName={link.business_name}
           customerName={link.customer_name}
-        >
-          <PhotoIntake
-            mode={{ kind: "live", token }}
-            businessName={link.business_name}
-            initialPhotos={await getIntakePhotos(token)}
-            initialDescription={link.customer_description ?? ""}
-          />
-        </IntakeWelcome>
+          businessPhone={link.business_phone}
+          live={{ token, photos: await getIntakePhotos(token) }}
+        />
       );
     case "submitted":
       return (
@@ -105,7 +98,7 @@ function Unavailable({
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center space-y-3 px-6 py-10">
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
       <div className="space-y-3 text-base leading-7 text-neutral-700">
         {children}

@@ -70,12 +70,11 @@ const requestSchema = z
       ),
   });
 
-export async function createServiceRequest(
-  _prevState: RequestFormState,
-  formData: FormData,
-): Promise<RequestFormState> {
-  const { workspace } = await requireWorkspace();
+type ParsedRequest = z.infer<typeof requestSchema>;
 
+function parseRequestForm(
+  formData: FormData,
+): { data: ParsedRequest } | { state: RequestFormState } {
   const parsed = requestSchema.safeParse({
     customerName: String(formData.get("customerName") ?? ""),
     customerPhone: String(formData.get("customerPhone") ?? ""),
@@ -91,8 +90,22 @@ export async function createServiceRequest(
       const field = issue.path[0] as RequestField;
       fieldErrors[field] ??= issue.message;
     }
-    return { fieldErrors };
+    return { state: { fieldErrors } };
   }
+  return { data: parsed.data };
+}
+
+export async function createServiceRequest(
+  _prevState: RequestFormState,
+  formData: FormData,
+): Promise<RequestFormState> {
+  const { workspace } = await requireWorkspace();
+
+  const result = parseRequestForm(formData);
+  if ("state" in result) {
+    return result.state;
+  }
+  const { data } = result;
 
   const link = newIntakeLink();
   const supabase = await createClient();
@@ -100,14 +113,13 @@ export async function createServiceRequest(
     "create_service_request",
     {
       p_organization_id: workspace.id,
-      p_customer_name: parsed.data.customerName,
-      p_customer_phone: parsed.data.customerPhone,
-      p_customer_email: parsed.data.customerEmail,
-      p_service_address: parsed.data.serviceAddress,
-      p_trade: parsed.data.trade,
-      p_trade_other:
-        parsed.data.trade === "other" ? parsed.data.tradeOther : null,
-      p_issue_description: parsed.data.issueDescription,
+      p_customer_name: data.customerName,
+      p_customer_phone: data.customerPhone,
+      p_customer_email: data.customerEmail,
+      p_service_address: data.serviceAddress,
+      p_trade: data.trade,
+      p_trade_other: data.trade === "other" ? data.tradeOther : null,
+      p_issue_description: data.issueDescription,
       p_link_id: link.id,
       p_token_hash: link.tokenHash,
     },
@@ -119,6 +131,50 @@ export async function createServiceRequest(
 
   revalidatePath("/app/requests");
   redirect(`/app/requests/${requestId}?created=1`);
+}
+
+// Bound to a request id on the edit page. The id comes from the client, so
+// the update is scoped to the caller's workspace (and RLS enforces it too).
+export async function updateServiceRequest(
+  requestId: string,
+  _prevState: RequestFormState,
+  formData: FormData,
+): Promise<RequestFormState> {
+  const { workspace } = await requireWorkspace();
+
+  const result = parseRequestForm(formData);
+  if ("state" in result) {
+    return result.state;
+  }
+  const { data } = result;
+
+  const supabase = await createClient();
+  const { data: updated, error } = await supabase
+    .from("service_requests")
+    .update({
+      customer_name: data.customerName,
+      customer_phone: data.customerPhone || null,
+      customer_email: data.customerEmail || null,
+      service_address: data.serviceAddress || null,
+      trade: data.trade,
+      trade_other: data.trade === "other" ? data.tradeOther : null,
+      issue_description: data.issueDescription,
+    })
+    .eq("id", requestId)
+    .eq("organization_id", workspace.id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return { error: "We couldn't save your changes. Please try again." };
+  }
+  if (!updated) {
+    return { error: "This request no longer exists or isn't in your workspace." };
+  }
+
+  revalidatePath("/app/requests");
+  revalidatePath(`/app/requests/${requestId}`);
+  redirect(`/app/requests/${requestId}?updated=1`);
 }
 
 export async function regenerateIntakeLink(requestId: string) {

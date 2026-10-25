@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { IntakeWelcome } from "@/app/i/intake-welcome";
-import { PhotoIntake } from "@/app/i/photo-intake";
 import { getServiceRequest } from "@/lib/service-requests";
 import { requireWorkspace } from "@/lib/workspace";
 
@@ -41,18 +40,12 @@ async function Preview({
         </div>
       </div>
       <main className="mx-auto max-w-md px-6 py-10">
-        <div className="rounded-lg border border-neutral-200 bg-white p-6">
+        <div className="rounded-lg border border-neutral-200 bg-white">
           <IntakeWelcome
             businessName={workspace.name}
             customerName={request.customerName}
-          >
-            <PhotoIntake
-              mode={{ kind: "preview" }}
-              businessName={workspace.name}
-              initialPhotos={[]}
-              initialDescription=""
-            />
-          </IntakeWelcome>
+            embedded
+          />
         </div>
       </main>
     </>

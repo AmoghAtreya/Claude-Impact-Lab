@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { statusClassName } from "@/app/ui/form-styles";
+import { HVAC_PHOTO_PROMPTS } from "@/lib/intake-demo";
 import { intakeUrl } from "@/lib/intake-links";
 import { listRequestPhotos, type RequestPhoto } from "@/lib/intake-photos";
 import {
@@ -33,7 +34,10 @@ async function RequestDetail({
   params,
   searchParams,
 }: Pick<PageProps<"/app/requests/[id]">, "params" | "searchParams">) {
-  const [{ id }, { created }] = await Promise.all([params, searchParams]);
+  const [{ id }, { created, updated }] = await Promise.all([
+    params,
+    searchParams,
+  ]);
   const { workspace } = await requireWorkspace();
   const request = await getServiceRequest(workspace.id, id);
   if (!request) {
@@ -76,6 +80,10 @@ async function RequestDetail({
           Request created. Copy or share the link below to send it to{" "}
           {request.customerName}.
         </p>
+      ) : updated ? (
+        <p role="status" className={statusClassName}>
+          Changes saved.
+        </p>
       ) : null}
 
       <IntakeLinkPanel
@@ -88,7 +96,15 @@ async function RequestDetail({
       />
 
       <section className="rounded-lg border border-neutral-200 bg-white p-5 sm:p-6">
-        <h2 className="mb-4 text-base font-semibold">Details</h2>
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <h2 className="text-base font-semibold">Details</h2>
+          <Link
+            href={`/app/requests/${request.id}/edit`}
+            className="inline-flex h-9 items-center rounded-md border border-neutral-300 bg-white px-3 text-sm font-medium"
+          >
+            Edit
+          </Link>
+        </div>
         <dl className="grid gap-4 sm:grid-cols-[10rem_1fr]">
           {details.map(([label, value]) => (
             <div key={label} className="contents">
@@ -133,29 +149,31 @@ function RequestPhotoGallery({ photos }: { photos: RequestPhoto[] }) {
   }
   return (
     <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-      {photos.map((photo, index) => (
-        <li key={photo.id} className="space-y-1.5">
-          <a
-            href={photo.fullUrl ?? undefined}
-            target="_blank"
-            rel="noreferrer"
-            className="block aspect-square overflow-hidden rounded-md bg-neutral-100"
-          >
-            {photo.thumbnailUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-              <img
-                src={photo.thumbnailUrl}
-                alt={photo.caption ?? `Customer photo ${index + 1}`}
-                className="size-full object-contain"
-                style={{ transform: `rotate(${photo.rotation}deg)` }}
-              />
-            ) : null}
-          </a>
-          {photo.caption ? (
-            <p className="text-sm text-neutral-700">{photo.caption}</p>
-          ) : null}
-        </li>
-      ))}
+      {photos.map((photo, index) => {
+        const label =
+          HVAC_PHOTO_PROMPTS.find((prompt) => prompt.id === photo.promptId)
+            ?.title ?? `Customer photo ${index + 1}`;
+        return (
+          <li key={photo.id} className="space-y-1.5">
+            <a
+              href={photo.fullUrl ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="block aspect-square overflow-hidden rounded-md bg-neutral-100"
+            >
+              {photo.thumbnailUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+                <img
+                  src={photo.thumbnailUrl}
+                  alt={label}
+                  className="size-full object-contain"
+                />
+              ) : null}
+            </a>
+            <p className="text-sm text-neutral-700">{label}</p>
+          </li>
+        );
+      })}
     </ul>
   );
 }

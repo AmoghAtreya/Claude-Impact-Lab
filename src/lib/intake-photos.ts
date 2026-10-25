@@ -5,7 +5,6 @@ import {
   INTAKE_PHOTO_MAX_BYTES,
   INTAKE_PHOTO_MAX_COUNT,
   type IntakePhoto,
-  type IntakePhotoRotation,
 } from "@/lib/intake-photo-rules";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -101,7 +100,7 @@ async function processIntakePhoto(
 export async function addIntakePhoto(
   token: string,
   file: File,
-  options: { caption: string; replacesPhotoId: string | null },
+  options: { promptId: string | null; replacesPhotoId: string | null },
 ): Promise<IntakeResult<{ photo: IntakePhoto }>> {
   const processed = await processIntakePhoto(file);
   if (!processed.ok) {
@@ -114,7 +113,7 @@ export async function addIntakePhoto(
   const { data: reserved, error: reserveError } = await supabase
     .rpc("reserve_intake_photo", {
       p_token_hash: tokenHash,
-      p_caption: options.caption,
+      p_prompt_id: options.promptId,
       p_replaces_photo_id: options.replacesPhotoId,
     })
     .single<{ photo_id: string } & StoredFiles>();
@@ -155,9 +154,8 @@ export async function addIntakePhoto(
     ok: true,
     photo: {
       id: reserved.photo_id,
+      promptId: options.promptId,
       thumbnailUrl: thumbnailUrl ?? "",
-      caption: options.caption.trim(),
-      rotation: 0,
     },
   };
 }
@@ -165,9 +163,8 @@ export async function addIntakePhoto(
 export async function getIntakePhotos(token: string): Promise<IntakePhoto[]> {
   const { rows: data, error } = await rpcRows<{
     id: string;
+    prompt_id: string | null;
     thumb_path: string;
-    caption: string | null;
-    rotation: IntakePhotoRotation;
   }>("get_intake_photos", { p_token_hash: hashIntakeToken(token) });
   if (error) {
     throw new Error(`Failed to load intake photos: ${error.message}`);
@@ -176,61 +173,16 @@ export async function getIntakePhotos(token: string): Promise<IntakePhoto[]> {
   const urls = await signThumbnails(data.map((row) => row.thumb_path));
   return data.map((row, index) => ({
     id: row.id,
+    promptId: row.prompt_id,
     thumbnailUrl: urls[index] ?? "",
-    caption: row.caption ?? "",
-    rotation: row.rotation,
   }));
-}
-
-export async function removeIntakePhoto(
-  token: string,
-  photoId: string,
-): Promise<IntakeResult> {
-  const { rows: data, error } = await rpcRows<StoredFiles>(
-    "remove_intake_photo",
-    { p_token_hash: hashIntakeToken(token), p_photo_id: photoId },
-  );
-  if (error) {
-    return { ok: false, error: databaseError(error.message) };
-  }
-  // Removing an already-removed photo is a no-op.
-  await deleteFiles(data);
-  return { ok: true };
-}
-
-export async function updateIntakePhoto(
-  token: string,
-  photoId: string,
-  changes: { caption: string; rotation: IntakePhotoRotation },
-): Promise<IntakeResult> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("update_intake_photo", {
-    p_token_hash: hashIntakeToken(token),
-    p_photo_id: photoId,
-    p_caption: changes.caption,
-    p_rotation: changes.rotation,
-  });
-  return error ? { ok: false, error: databaseError(error.message) } : { ok: true };
-}
-
-export async function saveIntakeDescription(
-  token: string,
-  description: string,
-): Promise<IntakeResult> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("save_intake_description", {
-    p_token_hash: hashIntakeToken(token),
-    p_description: description,
-  });
-  return error ? { ok: false, error: databaseError(error.message) } : { ok: true };
 }
 
 export type RequestPhoto = {
   id: string;
   thumbnailUrl: string | null;
   fullUrl: string | null;
-  caption: string | null;
-  rotation: IntakePhotoRotation;
+  promptId: string | null;
 };
 
 // The contractor's view. RLS and storage policies limit both the rows and
@@ -242,7 +194,7 @@ export async function listRequestPhotos(
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("intake_photos")
-    .select("id, storage_path, thumbnail_path, caption, rotation")
+    .select("id, storage_path, thumbnail_path, prompt_id")
     .eq("organization_id", organizationId)
     .eq("service_request_id", requestId)
     .eq("status", "ready")
@@ -254,8 +206,7 @@ export async function listRequestPhotos(
         id: string;
         storage_path: string;
         thumbnail_path: string;
-        caption: string | null;
-        rotation: IntakePhotoRotation;
+        prompt_id: string | null;
       }[],
       { merge: false }
     >();
@@ -281,8 +232,7 @@ export async function listRequestPhotos(
     id: row.id,
     thumbnailUrl: thumbnails.data?.[index]?.signedUrl ?? null,
     fullUrl: fulls.data?.[index]?.signedUrl ?? null,
-    caption: row.caption,
-    rotation: row.rotation,
+    promptId: row.prompt_id,
   }));
 }
 

@@ -1,7 +1,7 @@
 import { isIntakeToken } from "@/lib/intake-links";
 import {
-  INTAKE_CAPTION_MAX_LENGTH,
   INTAKE_PHOTO_MAX_BYTES,
+  PROMPT_ID_PATTERN,
 } from "@/lib/intake-photo-rules";
 import { addIntakePhoto } from "@/lib/intake-photos";
 
@@ -44,18 +44,18 @@ export async function POST(
   }
 
   const photo = form.get("photo");
-  const caption = String(form.get("caption") ?? "");
+  const prompt = form.get("prompt");
   const replaces = form.get("replaces");
   if (
     !(photo instanceof File) ||
-    caption.length > INTAKE_CAPTION_MAX_LENGTH ||
+    (prompt !== null && !(typeof prompt === "string" && PROMPT_ID_PATTERN.test(prompt))) ||
     (replaces !== null && !(typeof replaces === "string" && UUID_PATTERN.test(replaces)))
   ) {
     return Response.json({ error: "Upload failed. Please try again." }, { status: 400 });
   }
 
   const result = await addIntakePhoto(token, photo, {
-    caption,
+    promptId: prompt,
     replacesPhotoId: replaces,
   });
   return result.ok
