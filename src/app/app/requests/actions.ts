@@ -58,6 +58,7 @@ const requestSchema = z
     issueDescription: z
       .string()
       .trim()
+      .min(1, { error: "Describe the issue." })
       .max(2000, { error: "Keep the description under 2,000 characters." }),
   })
   .refine((data) => data.trade !== "other" || data.tradeOther.length > 0, {

@@ -13,7 +13,12 @@ import {
   labelClassName,
   primaryButtonClassName,
 } from "@/app/ui/form-styles";
-import { TRADE_OTHER_MAX_LENGTH, TRADES, type Trade } from "@/lib/trades";
+import {
+  TRADE_OTHER_MAX_LENGTH,
+  TRADES,
+  tradeLabel,
+  type Trade,
+} from "@/lib/trades";
 import {
   createServiceRequest,
   type RequestField,
@@ -63,6 +68,7 @@ export function NewRequestForm({
     <form
       action={formAction}
       onSubmit={handleSubmit}
+      autoComplete="off"
       className="flex flex-col gap-5"
       noValidate
     >
@@ -130,10 +136,13 @@ export function NewRequestForm({
           <label htmlFor="trade" className={labelClassName}>
             Trade
           </label>
+          {/* Controlled so browser form restoration can't override the
+              workspace default. */}
           <select
             {...fieldProps("trade")}
-            defaultValue={defaultTrade}
+            value={trade}
             onChange={(event) => setTrade(event.target.value)}
+            autoComplete="off"
             className={inputClassName}
           >
             {TRADES.map((option) => (
@@ -142,6 +151,10 @@ export function NewRequestForm({
               </option>
             ))}
           </select>
+          <p className="text-sm text-neutral-500">
+            Defaults to your business&apos;s trade:{" "}
+            {tradeLabel(defaultTrade, defaultTradeOther)}.
+          </p>
           {fieldError("trade")}
         </div>
         {trade === "other" ? (
@@ -162,10 +175,11 @@ export function NewRequestForm({
         ) : null}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="issueDescription" className={labelClassName}>
-            What&apos;s the issue? {optional}
+            What&apos;s the issue?
           </label>
           <textarea
             {...fieldProps("issueDescription")}
+            required
             rows={4}
             maxLength={2000}
             placeholder="e.g. AC running but not cooling, water under the indoor unit"
