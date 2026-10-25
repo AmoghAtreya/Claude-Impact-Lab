@@ -1,20 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { secondaryButtonClassName } from "@/app/ui/form-styles";
 import { retryBriefAction } from "../actions";
 
-// Re-fetches the page while the brief is being written so it appears
-// without a manual refresh.
-export function BriefAutoRefresh({ seconds = 5 }: { seconds?: number }) {
-  const router = useRouter();
-  useEffect(() => {
-    const timer = setInterval(() => router.refresh(), seconds * 1000);
-    return () => clearInterval(timer);
-  }, [router, seconds]);
-  return null;
-}
+export { AutoRefresh as BriefAutoRefresh } from "@/app/ui/auto-refresh";
 
 export function RetryBriefButton({ requestId }: { requestId: string }) {
   const [pending, startTransition] = useTransition();

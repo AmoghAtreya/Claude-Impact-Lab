@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
 import { hashIntakeToken, isIntakeToken } from "@/lib/intake-links";
+import { getReleasedEstimate, intakeEstimatesEnabled } from "@/lib/estimates";
 import { getIntakeProgress } from "@/lib/intake-ai";
 import { getIntakePhotos } from "@/lib/intake-photos";
 import { createClient } from "@/lib/supabase/server";
+import { EstimateView } from "../estimate-view";
 import { IntakeWelcome } from "../intake-welcome";
 
-// The AI analysis runs inside this page's server actions; give it room.
-export const maxDuration = 120;
+// The AI analysis runs inside this page's server actions, and submitting
+// writes the brief and then the estimate draft after the response.
+export const maxDuration = 300;
 
 // Keep the token out of Referer headers and search engines.
 export const metadata: Metadata = {
@@ -52,12 +55,17 @@ async function Intake({ params }: Pick<PageProps<"/i/[token]">, "params">) {
   // can't use it up.
   switch (link.status) {
     case "active": {
-      const [photos, progress] = await Promise.all([getIntakePhotos(token), getIntakeProgress(token)]);
+      const [photos, progress, estimatesEnabled] = await Promise.all([
+        getIntakePhotos(token),
+        getIntakeProgress(token),
+        intakeEstimatesEnabled(token),
+      ]);
       return (
         <IntakeWelcome
           businessName={link.business_name}
           customerName={link.customer_name}
           businessPhone={link.business_phone}
+          estimatesEnabled={estimatesEnabled}
           live={{
             token,
             photos,
@@ -67,13 +75,19 @@ async function Intake({ params }: Pick<PageProps<"/i/[token]">, "params">) {
         />
       );
     }
-    case "submitted":
+    case "submitted": {
+      // Only a released estimate is ever shown here (C10).
+      const estimate = await getReleasedEstimate(token);
+      if (estimate) {
+        return <EstimateView businessName={link.business_name} businessPhone={link.business_phone} estimate={estimate} />;
+      }
       return (
         <Unavailable title="Thanks, your details were sent">
           {link.business_name} has your photos and answers. They&apos;ll be in
           touch about next steps.
         </Unavailable>
       );
+    }
     case "expired":
     case "revoked":
       return (

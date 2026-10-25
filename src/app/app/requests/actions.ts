@@ -4,6 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
+import {
+  approveEstimate,
+  newEstimateVersion,
+  releaseEstimate,
+  runEstimateJob,
+  saveEstimateDraft,
+  startEstimateRegeneration,
+} from "@/lib/estimates";
 import { retryBrief, runBriefJob } from "@/lib/intake-ai";
 import { newIntakeLink } from "@/lib/intake-links";
 import { processStorageDeletions } from "@/lib/storage-cleanup";
@@ -298,4 +306,45 @@ export async function deleteServiceRequest(requestId: string, confirmation: stri
 
   revalidatePath("/app/requests");
   redirect(`/app/requests?deleted=${request.number}`);
+}
+
+// ---------- estimates (B9) ----------
+// Each action re-checks the workspace; approve and release also go through
+// database functions that check the user's role.
+
+export async function saveEstimateAction(requestId: string, estimateId: string, edit: unknown) {
+  const { user, workspace } = await requireWorkspace();
+  const result = await saveEstimateDraft(workspace.id, user.id, estimateId, edit);
+  revalidatePath(`/app/requests/${requestId}`);
+  return result.ok ? {} : { error: result.error };
+}
+
+export async function approveEstimateAction(requestId: string, estimateId: string) {
+  await requireWorkspace();
+  const result = await approveEstimate(estimateId);
+  revalidatePath(`/app/requests/${requestId}`);
+  return result.ok ? {} : { error: result.error };
+}
+
+export async function releaseEstimateAction(requestId: string, estimateId: string) {
+  await requireWorkspace();
+  const result = await releaseEstimate(estimateId);
+  revalidatePath(`/app/requests/${requestId}`);
+  return result.ok ? {} : { error: result.error };
+}
+
+export async function newEstimateVersionAction(requestId: string, estimateId: string) {
+  const { user, workspace } = await requireWorkspace();
+  const result = await newEstimateVersion(workspace.id, user.id, estimateId);
+  revalidatePath(`/app/requests/${requestId}`);
+  return result.ok ? {} : { error: result.error };
+}
+
+export async function regenerateEstimateAction(requestId: string) {
+  const { workspace } = await requireWorkspace();
+  const result = await startEstimateRegeneration(workspace.id, requestId);
+  if (!result.ok) return { error: result.error };
+  after(() => runEstimateJob(result.jobId));
+  revalidatePath(`/app/requests/${requestId}`);
+  return {};
 }

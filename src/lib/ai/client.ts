@@ -8,7 +8,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export const AI_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 
 // Budgets (spec §6). Counted from ai_usage, which records every call.
-const PER_REQUEST_LIMIT = { analysis: 6, brief: 6 } as const;
+// Price extraction isn't tied to a request, so it has a per-workspace cap.
+const PER_REQUEST_LIMIT = { analysis: 6, brief: 6, estimate: 6, price_extraction: null } as const;
+const PRICE_EXTRACTION_DAILY_LIMIT = 30;
 const WORKSPACE_DAILY_LIMIT = Number(process.env.AI_WORKSPACE_DAILY_LIMIT) || 200;
 const GLOBAL_DAILY_LIMIT = Number(process.env.AI_GLOBAL_DAILY_LIMIT) || 2000;
 
@@ -30,17 +32,25 @@ export type AiCallResult<T> =
   | { ok: true; data: T }
   | { ok: false; code: "budget" | "refused" | "invalid_output" | "api_error" | "not_configured" };
 
-type Scope = { organizationId: string; serviceRequestId: string };
+type Scope = { organizationId: string; serviceRequestId: string | null };
 
 async function withinBudget(kind: AiKind, scope: Scope) {
   const admin = createAdminClient();
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const perRequestLimit = PER_REQUEST_LIMIT[kind];
   const [perRequest, perWorkspace, global] = await Promise.all([
-    admin
-      .from("ai_usage")
-      .select("id", { count: "exact", head: true })
-      .eq("service_request_id", scope.serviceRequestId)
-      .eq("kind", kind),
+    scope.serviceRequestId
+      ? admin
+          .from("ai_usage")
+          .select("id", { count: "exact", head: true })
+          .eq("service_request_id", scope.serviceRequestId)
+          .eq("kind", kind)
+      : admin
+          .from("ai_usage")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", scope.organizationId)
+          .eq("kind", kind)
+          .gte("created_at", since),
     admin
       .from("ai_usage")
       .select("id", { count: "exact", head: true })
@@ -49,7 +59,7 @@ async function withinBudget(kind: AiKind, scope: Scope) {
     admin.from("ai_usage").select("id", { count: "exact", head: true }).gte("created_at", since),
   ]);
   return (
-    (perRequest.count ?? 0) < PER_REQUEST_LIMIT[kind] &&
+    (perRequest.count ?? 0) < (perRequestLimit ?? PRICE_EXTRACTION_DAILY_LIMIT) &&
     (perWorkspace.count ?? 0) < WORKSPACE_DAILY_LIMIT &&
     (global.count ?? 0) < GLOBAL_DAILY_LIMIT
   );
