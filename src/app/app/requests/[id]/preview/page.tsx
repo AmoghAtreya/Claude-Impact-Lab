@@ -40,10 +40,11 @@ async function Preview({
         </div>
       </div>
       <main className="mx-auto max-w-md px-6 py-10">
-        <div className="rounded-lg border border-neutral-200 bg-white p-6">
+        <div className="rounded-lg border border-neutral-200 bg-white">
           <IntakeWelcome
             businessName={workspace.name}
             customerName={request.customerName}
+            embedded
           />
         </div>
       </main>
