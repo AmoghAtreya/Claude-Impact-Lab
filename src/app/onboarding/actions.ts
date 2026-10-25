@@ -6,6 +6,7 @@ import { processAvatar, saveAvatar } from "@/lib/avatar";
 import { getCurrentWorkspace } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { TRADE_OTHER_MAX_LENGTH, TRADES, type Trade } from "@/lib/trades";
+import { PHONE_PATTERN, PHONE_PATTERN_MESSAGE } from "@/lib/validation";
 
 export type OnboardingField =
   | "avatar"
@@ -55,9 +56,7 @@ const workspaceSchema = z
       .string()
       .trim()
       .max(40, { error: "Enter a shorter phone number." })
-      .regex(/^[0-9+()\-.\s]*$/, {
-        error: "Use digits, spaces, and + ( ) - . only.",
-      }),
+      .regex(PHONE_PATTERN, { error: PHONE_PATTERN_MESSAGE }),
     timezone: z
       .string()
       .min(1, { error: "Choose your timezone." })

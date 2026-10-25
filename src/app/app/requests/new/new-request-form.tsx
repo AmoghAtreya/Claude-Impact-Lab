@@ -1,0 +1,215 @@
+"use client";
+
+import Link from "next/link";
+import {
+  startTransition,
+  useActionState,
+  useState,
+  type FormEvent,
+} from "react";
+import {
+  fieldErrorClassName,
+  inputClassName,
+  labelClassName,
+  primaryButtonClassName,
+} from "@/app/ui/form-styles";
+import {
+  TRADE_OTHER_MAX_LENGTH,
+  TRADES,
+  tradeLabel,
+  type Trade,
+} from "@/lib/trades";
+import {
+  createServiceRequest,
+  type RequestField,
+  type RequestFormState,
+} from "../actions";
+
+type NewRequestFormProps = {
+  defaultTrade: Trade;
+  defaultTradeOther: string | null;
+};
+
+export function NewRequestForm({
+  defaultTrade,
+  defaultTradeOther,
+}: NewRequestFormProps) {
+  const [state, formAction, pending] = useActionState<
+    RequestFormState,
+    FormData
+  >(createServiceRequest, {});
+  const [trade, setTrade] = useState<string>(defaultTrade);
+
+  // Submitting manually skips React's automatic form reset, so a failed
+  // submit keeps everything the contractor typed.
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => formAction(formData));
+  }
+
+  const fieldError = (field: RequestField) =>
+    state.fieldErrors?.[field] ? (
+      <p id={`${field}-error`} className={fieldErrorClassName}>
+        {state.fieldErrors[field]}
+      </p>
+    ) : null;
+  const fieldProps = (field: RequestField) => ({
+    id: field,
+    name: field,
+    "aria-invalid": Boolean(state.fieldErrors?.[field]),
+    "aria-describedby": state.fieldErrors?.[field] ? `${field}-error` : undefined,
+  });
+  const optional = (
+    <span className="font-normal text-neutral-500">(optional)</span>
+  );
+
+  return (
+    <form
+      action={formAction}
+      onSubmit={handleSubmit}
+      autoComplete="off"
+      className="flex flex-col gap-5"
+      noValidate
+    >
+      <fieldset className="flex flex-col gap-5">
+        <legend className="mb-3 text-base font-semibold">Customer</legend>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="customerName" className={labelClassName}>
+            Name
+          </label>
+          <input
+            {...fieldProps("customerName")}
+            type="text"
+            autoComplete="off"
+            required
+            maxLength={120}
+            className={inputClassName}
+          />
+          {fieldError("customerName")}
+        </div>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="customerPhone" className={labelClassName}>
+              Phone {optional}
+            </label>
+            <input
+              {...fieldProps("customerPhone")}
+              type="tel"
+              autoComplete="off"
+              maxLength={40}
+              className={inputClassName}
+            />
+            {fieldError("customerPhone")}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="customerEmail" className={labelClassName}>
+              Email {optional}
+            </label>
+            <input
+              {...fieldProps("customerEmail")}
+              type="email"
+              autoComplete="off"
+              maxLength={254}
+              className={inputClassName}
+            />
+            {fieldError("customerEmail")}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="serviceAddress" className={labelClassName}>
+            Service address {optional}
+          </label>
+          <textarea
+            {...fieldProps("serviceAddress")}
+            rows={2}
+            maxLength={300}
+            className={`${inputClassName} h-auto py-2`}
+          />
+          {fieldError("serviceAddress")}
+        </div>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-5">
+        <legend className="mb-3 text-base font-semibold">Job</legend>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="trade" className={labelClassName}>
+            Trade
+          </label>
+          {/* Controlled so browser form restoration can't override the
+              workspace default. */}
+          <select
+            {...fieldProps("trade")}
+            value={trade}
+            onChange={(event) => setTrade(event.target.value)}
+            autoComplete="off"
+            className={inputClassName}
+          >
+            {TRADES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-sm text-neutral-500">
+            Defaults to your business&apos;s trade:{" "}
+            {tradeLabel(defaultTrade, defaultTradeOther)}.
+          </p>
+          {fieldError("trade")}
+        </div>
+        {trade === "other" ? (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="tradeOther" className={labelClassName}>
+              Trade name
+            </label>
+            <input
+              {...fieldProps("tradeOther")}
+              type="text"
+              required
+              maxLength={TRADE_OTHER_MAX_LENGTH}
+              defaultValue={defaultTradeOther ?? ""}
+              className={inputClassName}
+            />
+            {fieldError("tradeOther")}
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="issueDescription" className={labelClassName}>
+            What&apos;s the issue?
+          </label>
+          <textarea
+            {...fieldProps("issueDescription")}
+            required
+            rows={4}
+            maxLength={2000}
+            placeholder="e.g. AC running but not cooling, water under the indoor unit"
+            className={`${inputClassName} h-auto py-2`}
+          />
+          <p className="text-sm text-neutral-500">
+            Anything you already know, so the customer isn&apos;t asked again.
+          </p>
+          {fieldError("issueDescription")}
+        </div>
+      </fieldset>
+
+      {state.error ? (
+        <p role="alert" className={fieldErrorClassName}>
+          {state.error}
+        </p>
+      ) : null}
+
+      <div className="flex items-center gap-4">
+        <button
+          type="submit"
+          disabled={pending}
+          className={primaryButtonClassName}
+        >
+          {pending ? "Creating…" : "Create request and link"}
+        </button>
+        <Link href="/app/requests" className="text-sm underline">
+          Cancel
+        </Link>
+      </div>
+    </form>
+  );
+}
