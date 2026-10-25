@@ -40,7 +40,9 @@ export default function PortalLayout({ children }: LayoutProps<"/app">) {
         </div>
       </header>
       <div className="pb-20 sm:pb-0">{children}</div>
-      <AppTabs />
+      <Suspense fallback={null}>
+        <AppTabs />
+      </Suspense>
     </div>
   );
 }
