@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
-import { hashIntakeToken } from "@/lib/intake-links";
+import { hashIntakeToken, isIntakeToken } from "@/lib/intake-links";
+import { getIntakePhotos } from "@/lib/intake-photos";
 import { createClient } from "@/lib/supabase/server";
 import { IntakeWelcome } from "../intake-welcome";
+import { PhotoIntake } from "../photo-intake";
 
 // Keep the token out of Referer headers and search engines.
 export const metadata: Metadata = {
@@ -17,10 +19,8 @@ type LinkRow = {
   business_email: string | null;
   business_phone: string | null;
   customer_name: string;
+  customer_description: string | null;
 };
-
-// Derived tokens are 32-byte HMACs in base64url.
-const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 export default function IntakePage({ params }: PageProps<"/i/[token]">) {
   return (
@@ -34,7 +34,7 @@ export default function IntakePage({ params }: PageProps<"/i/[token]">) {
 
 async function Intake({ params }: Pick<PageProps<"/i/[token]">, "params">) {
   const { token } = await params;
-  const link = TOKEN_PATTERN.test(token) ? await lookUpLink(token) : null;
+  const link = isIntakeToken(token) ? await lookUpLink(token) : null;
 
   if (!link) {
     return (
@@ -53,7 +53,14 @@ async function Intake({ params }: Pick<PageProps<"/i/[token]">, "params">) {
         <IntakeWelcome
           businessName={link.business_name}
           customerName={link.customer_name}
-        />
+        >
+          <PhotoIntake
+            mode={{ kind: "live", token }}
+            businessName={link.business_name}
+            initialPhotos={await getIntakePhotos(token)}
+            initialDescription={link.customer_description ?? ""}
+          />
+        </IntakeWelcome>
       );
     case "submitted":
       return (

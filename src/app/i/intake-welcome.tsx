@@ -1,11 +1,15 @@
+import type { ReactNode } from "react";
+
 // The first screen a customer sees. Shared by /i/[token] and the
 // contractor preview so they always match.
 export function IntakeWelcome({
   businessName,
   customerName,
+  children,
 }: {
   businessName: string;
   customerName: string;
+  children: ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-6">
@@ -20,29 +24,12 @@ export function IntakeWelcome({
           account needed.
         </p>
       </div>
-      <div className="flex flex-col gap-3">
-        <button
-          type="button"
-          disabled
-          className="inline-flex h-12 items-center justify-center rounded-md bg-neutral-900 px-4 text-base font-medium text-white disabled:opacity-50"
-        >
-          Take a photo
-        </button>
-        <button
-          type="button"
-          disabled
-          className="inline-flex h-12 items-center justify-center rounded-md border border-neutral-300 px-4 text-base font-medium disabled:opacity-50"
-        >
-          Upload a photo
-        </button>
-        <p className="text-sm text-neutral-500">
-          Photo intake is coming soon.
-        </p>
-      </div>
+      {children}
       <p className="text-xs leading-5 text-neutral-500">
         Your photos and answers are shared with {businessName} and processed
-        with AI to prepare for your visit. Submitting doesn&apos;t book an
-        appointment.
+        with AI to prepare for your visit. Location data is removed from
+        photos. Anyone with this link can see and change what you add, so
+        don&apos;t forward it. Submitting doesn&apos;t book an appointment.
       </p>
     </div>
   );

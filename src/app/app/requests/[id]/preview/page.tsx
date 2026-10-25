@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { IntakeWelcome } from "@/app/i/intake-welcome";
+import { PhotoIntake } from "@/app/i/photo-intake";
 import { getServiceRequest } from "@/lib/service-requests";
 import { requireWorkspace } from "@/lib/workspace";
 
@@ -44,7 +45,14 @@ async function Preview({
           <IntakeWelcome
             businessName={workspace.name}
             customerName={request.customerName}
-          />
+          >
+            <PhotoIntake
+              mode={{ kind: "preview" }}
+              businessName={workspace.name}
+              initialPhotos={[]}
+              initialDescription=""
+            />
+          </IntakeWelcome>
         </div>
       </main>
     </>
