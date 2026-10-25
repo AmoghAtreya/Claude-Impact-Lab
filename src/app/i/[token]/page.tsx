@@ -28,7 +28,7 @@ type LinkRow = {
 export default function IntakePage({ params }: PageProps<"/i/[token]">) {
   return (
     <main className="min-h-dvh">
-      <Suspense fallback={<p className="p-6 text-sm text-neutral-500">Loading…</p>}>
+      <Suspense fallback={<p className="p-6 text-sm text-muted">Loading…</p>}>
         <Intake params={params} />
       </Suspense>
     </main>
@@ -110,9 +110,9 @@ function Unavailable({
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center space-y-3 px-6 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-      <div className="space-y-3 text-base leading-7 text-neutral-700">
+    <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center space-y-3 bg-page px-6 py-10 text-ink">
+      <h1 className="font-display text-[28px] font-bold leading-tight">{title}</h1>
+      <div className="space-y-3 text-base leading-7 text-muted">
         {children}
       </div>
     </div>

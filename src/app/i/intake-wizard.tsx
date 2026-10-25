@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import {
-  inputClassName,
-  primaryButtonClassName,
-  secondaryButtonClassName,
-} from "@/app/ui/form-styles";
+import { inputClassName } from "@/app/ui/form-styles";
 import { demoAnalysis } from "@/lib/intake-demo";
 import {
   INTAKE_CAPTION_MAX_LENGTH,
@@ -66,11 +62,12 @@ type Analysis =
   | { status: "ready"; view: IntakeAnalysisView }
   | { status: "failed"; error: string };
 
-const EMPTY_ANALYSIS: IntakeAnalysisView = { questions: [], photoIssues: [], urgentConcern: null };
+const EMPTY_ANALYSIS: IntakeAnalysisView = { seen: [], questions: [], photoIssues: [], urgentConcern: null };
 
 // Photo-first customer intake: 1–5 photos (or a description if no photo is
 // possible) → AI looks at them and writes a few questions → answers → review
 // → sent. Previews and the demo run the same screens with sample questions.
+// Look and feel: docs/design/README.md and the v3 prototype.
 export function IntakeWizard({
   businessName,
   customerName,
@@ -335,17 +332,28 @@ export function IntakeWizard({
         embedded={embedded}
         action={<Primary onClick={() => setStep({ kind: "photos" })}>Start with a photo</Primary>}
       >
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-neutral-600">{businessName}</p>
-          {businessPhone ? <p className="text-sm text-neutral-500">{businessPhone}</p> : null}
+        <div className="flex items-center gap-3">
+          <div className="grid h-13 w-13 shrink-0 place-items-center rounded-2xl bg-ink font-display font-extrabold text-white">
+            {initials(businessName)}
+          </div>
+          <div>
+            <b>{businessName}</b>
+            {businessPhone ? <p className="text-sm text-muted">{businessPhone}</p> : null}
+          </div>
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight">Hi {customerName}, show us the problem</h1>
-        <p className="text-base leading-7 text-neutral-700">
-          {businessName} asked for a photo of the problem and a few quick answers so they can bring the right parts.
-          It takes about two minutes.
+        <h1 className="mt-6 font-display text-[30px] font-bold leading-[1.08] tracking-tight">
+          Hi {customerName}, help us fix it in one trip.
+        </h1>
+        <p className="mt-2 text-muted">
+          {businessName} asked for a few photos and quick answers so they bring the right parts.
         </p>
-        <p className="text-sm leading-6 text-neutral-500">
-          No app or account needed. Only {businessName} sees your photos. We’ll never ask you to open covers or touch
+        <div className="my-5 grid grid-cols-3 gap-2.5 text-center text-sm">
+          <Effort big={`${INTAKE_PHOTO_MIN_COUNT}–${INTAKE_PHOTO_MAX_COUNT}`} label="photos" />
+          <Effort big="~3" label="quick taps" />
+          <Effort big="2 min" label="total" />
+        </div>
+        <p className="text-sm text-muted">
+          No app or account. Only {businessName} sees your photos. We’ll never ask you to open covers or touch
           wiring. Submitting doesn’t book an appointment.
         </p>
       </Screen>
@@ -363,35 +371,30 @@ export function IntakeWizard({
       <Screen
         embedded={embedded}
         back={() => setStep({ kind: "welcome" })}
+        corner={`${photos.length} of ${INTAKE_PHOTO_MAX_COUNT}`}
         action={
           photos.length > 0 ? (
-            <>
-              <Primary onClick={goToReading} disabled={!canContinue}>
-                Continue
-              </Primary>
-              {blocker ? <p className="text-sm text-neutral-500">{blocker}</p> : null}
-            </>
+            <Primary onClick={goToReading} disabled={!canContinue}>
+              {pending ? "Saving…" : "Done with photos"}
+            </Primary>
           ) : (
-            <button type="button" onClick={() => setStep({ kind: "no-photo" })} className="self-start text-sm underline">
-              I can’t take a photo
-            </button>
+            <>
+              <PhotoInput multiple onFiles={addPhotos} variant="secondary">
+                Upload
+              </PhotoInput>
+              <PhotoInput capture onFiles={addPhotos} grow>
+                📷 Take photo
+              </PhotoInput>
+            </>
           )
         }
       >
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">Take a photo of the problem</h1>
-          <ul className="list-disc space-y-1 pl-5 text-base leading-7 text-neutral-700">
-            <li>Start with the whole thing that isn’t working, like the appliance, fixture, or area.</li>
-            <li>Add close-ups of anything leaking, broken, burnt, or showing an error.</li>
-            <li>A sticker with the brand or model helps, if it’s easy to see. Don’t open covers.</li>
-          </ul>
-          <p className="text-sm text-neutral-500">
-            At least 1 photo, up to {INTAKE_PHOTO_MAX_COUNT}. {photos.length} added.
-          </p>
-        </div>
+        <h1 className="font-display text-2xl font-bold leading-tight">Show us the problem</h1>
+        <p className="mb-3 mt-1 text-[15px] text-muted">These help most. Don’t open covers.</p>
+        <PhotoChecklist count={photos.length} />
 
         {photos.length > 0 ? (
-          <ul className="flex flex-col gap-4">
+          <ul className="mt-4 flex flex-col gap-3">
             {photos.map((photo, index) => (
               <PhotoCard
                 key={photo.key}
@@ -413,27 +416,32 @@ export function IntakeWizard({
               />
             ))}
           </ul>
-        ) : (
-          <div className="flex aspect-[4/3] w-full items-center justify-center rounded-md border border-dashed border-neutral-300 bg-neutral-50 text-sm text-neutral-500">
-            Your photos will show here
-          </div>
-        )}
+        ) : null}
 
         {notice ? (
-          <p role="status" className="text-sm text-neutral-700">
+          <p role="status" className="mt-3 rounded-xl bg-chip p-3 text-[15px]">
             {notice}
           </p>
         ) : null}
+        {blocker ? <p className="mt-3 text-sm text-muted">{blocker}</p> : null}
 
-        {full ? (
-          <p className="text-sm text-neutral-500">That’s the most photos you can add. Remove one to add another.</p>
+        {photos.length === 0 ? (
+          <button
+            type="button"
+            onClick={() => setStep({ kind: "no-photo" })}
+            className="mt-4 min-h-12 font-bold text-accent-strong"
+          >
+            I can’t take a photo
+          </button>
+        ) : full ? (
+          <p className="mt-3 text-sm text-muted">That’s the most photos you can add. Remove one to add another.</p>
         ) : (
-          <div className="flex flex-col gap-3">
-            <PhotoInput capture onFiles={addPhotos} variant={photos.length === 0 ? "primary" : "secondary"}>
-              {photos.length === 0 ? "Take a photo" : "Take another photo"}
-            </PhotoInput>
+          <div className="mt-3 flex gap-2">
             <PhotoInput multiple onFiles={addPhotos} variant="secondary">
-              {photos.length === 0 ? "Upload a photo" : "Upload another photo"}
+              Upload another
+            </PhotoInput>
+            <PhotoInput capture onFiles={addPhotos} variant="secondary">
+              📷 Take another
             </PhotoInput>
           </div>
         )}
@@ -464,15 +472,15 @@ export function IntakeWizard({
     const backToSend = () => setStep(savedCount > 0 ? { kind: "photos" } : { kind: "no-photo" });
     if (analysis.status === "loading") {
       return (
-        <Screen embedded={embedded}>
-          <div aria-live="polite" className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {savedCount > 0 ? "Looking at your photos…" : "Reading your description…"}
-            </h1>
-            <p className="text-base leading-7 text-neutral-700">
-              This can take up to a minute. Keep this page open.
-            </p>
-          </div>
+        <Screen embedded={embedded} action={<Primary disabled onClick={() => {}}>Almost ready…</Primary>}>
+          <h1 className="mt-2 font-display text-2xl font-bold">
+            {savedCount > 0 ? "Looking at your photos…" : "Reading your description…"}
+          </h1>
+          <p className="mb-3 mt-1.5 text-[15px] text-muted">Up to a minute. Keep this page open.</p>
+          <ul aria-live="polite">
+            <ReadingLine state="active" label={savedCount > 0 ? "Your photos" : "Your description"} />
+            <ReadingLine state="todo" label="Your questions" />
+          </ul>
         </Screen>
       );
     }
@@ -483,32 +491,29 @@ export function IntakeWizard({
           back={backToSend}
           action={
             <>
-              <Primary onClick={() => void runAnalysis()}>Try again</Primary>
-              <button
-                type="button"
+              <Secondary
                 onClick={() => {
                   setSkipQuestions(true);
                   setStep({ kind: "note" });
                 }}
-                className={secondaryButtonClassName}
               >
-                Send without questions
-              </button>
+                Send without
+              </Secondary>
+              <Primary onClick={() => void runAnalysis()}>Try again</Primary>
             </>
           }
         >
-          <h1 className="text-2xl font-semibold tracking-tight">We couldn’t finish that</h1>
-          <p role="alert" className="text-base leading-7 text-neutral-700">
+          <h1 className="font-display text-2xl font-bold">We couldn’t finish that</h1>
+          <p role="alert" className="mt-1.5 text-[15px]">
             {analysis.error}
           </p>
-          <p className="text-sm text-neutral-500">
-            Your photos are saved. {firstName} will still see everything you send.
-          </p>
+          <p className="mt-2 text-sm text-muted">Your photos are saved. {firstName} will still see everything you send.</p>
         </Screen>
       );
     }
 
     const issues = analysis.view.photoIssues;
+    const seen = analysis.view.seen;
     return (
       <Screen
         embedded={embedded}
@@ -516,10 +521,8 @@ export function IntakeWizard({
         action={
           issues.length > 0 ? (
             <>
+              <Secondary onClick={() => afterReading()}>Continue anyway</Secondary>
               <Primary onClick={() => setStep({ kind: "photos" })}>Fix my photos</Primary>
-              <button type="button" onClick={() => afterReading()} className={secondaryButtonClassName}>
-                Continue anyway
-              </button>
             </>
           ) : (
             <Primary onClick={() => afterReading()}>
@@ -528,31 +531,39 @@ export function IntakeWizard({
           )
         }
       >
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {issues.length ? "A photo could be better" : "Thanks, that helps"}
-          </h1>
-          <p className="text-base leading-7 text-neutral-700">
-            {issues.length
-              ? "Fixing this helps them bring the right parts, but you can continue if you can’t."
-              : `${questions.length ? "Next, a few quick questions about what we couldn’t see." : "That’s all we need from the photos."}`}
-          </p>
-        </div>
+        <h1 className="mt-2 font-display text-2xl font-bold">
+          {issues.length ? "A photo could be better" : "Thanks, that helps"}
+        </h1>
+        <p className="mb-3 mt-1.5 text-[15px] text-muted">
+          {issues.length
+            ? "Fixing this helps them bring the right parts, but you can continue if you can’t."
+            : questions.length
+              ? `${questions.length} quick question${questions.length === 1 ? "" : "s"} about what the photos can’t show.`
+              : "That’s all we need from the photos."}
+        </p>
+        <ul aria-live="polite">
+          {seen.length ? (
+            seen.map((line) => <ReadingLine key={line} state="done" label="We read" result={line} />)
+          ) : (
+            <ReadingLine state="done" label={savedCount > 0 ? "Your photos" : "Your description"} result="Received" />
+          )}
+          {questions.length ? <ReadingLine state="done" label="Your questions" result="Written for your job" /> : null}
+        </ul>
         {issues.length ? (
-          <ul className="flex flex-col gap-3">
+          <ul className="mt-4 flex flex-col gap-2.5">
             {issues.map((issue) => {
               const index = photos.findIndex((p) => p.upload.status === "saved" && p.upload.id === issue.photoId);
               return (
-                <li key={issue.photoId} className="flex gap-3 rounded-md border border-neutral-200 p-3">
+                <li key={issue.photoId} className="flex gap-3 rounded-2xl border border-line bg-white p-3">
                   {index >= 0 ? (
                     <div className="w-20 shrink-0">
                       <PhotoImage photo={photos[index]} alt={`Photo ${index + 1}`} />
                     </div>
                   ) : null}
-                  <div className="space-y-1 text-sm">
-                    <p className="font-medium">{index >= 0 ? `Photo ${index + 1}` : "A photo"}</p>
-                    <p className="text-neutral-700">{issue.message}</p>
-                    {issue.requestedView ? <p className="text-neutral-600">Try: {issue.requestedView}</p> : null}
+                  <div className="text-[15px]">
+                    <b>{index >= 0 ? `Photo ${index + 1}` : "A photo"}</b>
+                    <p>{issue.message}</p>
+                    {issue.requestedView ? <p className="text-sm text-muted">Try: {issue.requestedView}</p> : null}
                   </div>
                 </li>
               );
@@ -567,7 +578,7 @@ export function IntakeWizard({
   if (step.kind === "question") {
     const question = questions[step.index];
     if (!question) {
-      return <p className="p-6 text-sm text-neutral-500">Loading questions…</p>;
+      return <p className="p-6 text-muted">Loading questions…</p>;
     }
     return (
       <QuestionStep
@@ -600,14 +611,13 @@ export function IntakeWizard({
         back={() =>
           setStep(questions.length ? { kind: "question", index: questions.length - 1 } : { kind: "reading" })
         }
+        corner="Last one, optional"
         action={<Primary onClick={() => setStep({ kind: "review" })}>Review and send</Primary>}
       >
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="intake-note" className="text-2xl font-semibold tracking-tight">
-            Anything else {firstName} should know?
-          </label>
-          <p className="text-base leading-7 text-neutral-700">Optional. In your own words.</p>
-        </div>
+        <label htmlFor="intake-note" className="block font-display text-2xl font-bold leading-tight">
+          Anything else {firstName} should know?
+        </label>
+        <p className="mb-3 mt-1.5 text-[15px] text-muted">In your own words. Your keyboard’s mic works here too.</p>
         <textarea
           id="intake-note"
           value={note}
@@ -615,7 +625,7 @@ export function IntakeWizard({
           rows={4}
           maxLength={2000}
           placeholder="e.g. It stopped after the heat wave"
-          className={`${inputClassName} h-auto py-2`}
+          className={`${inputClassName} h-auto w-full py-3 text-[17px]`}
         />
       </Screen>
     );
@@ -627,38 +637,28 @@ export function IntakeWizard({
         embedded={embedded}
         back={() => setStep({ kind: "note" })}
         action={
-          <>
-            <Primary onClick={() => void submit()} disabled={submitting}>
-              {submitting ? "Sending…" : `Send to ${firstName}`}
-            </Primary>
-            {submitError ? (
-              <p role="alert" className="text-sm text-red-700">
-                {submitError}
-              </p>
-            ) : null}
-          </>
+          <Primary onClick={() => void submit()} disabled={submitting}>
+            {submitting ? "Sending…" : `Send to ${firstName}`}
+          </Primary>
         }
       >
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">Look right?</h1>
-          <p className="text-base leading-7 text-neutral-700">Tap anything to change it.</p>
-        </div>
+        <h1 className="font-display text-2xl font-bold">Look right?</h1>
+        <p className="mb-3 mt-1 text-[15px] text-muted">Tap anything to change it.</p>
         {photos.length > 0 ? (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="mb-3 grid grid-cols-3 gap-2">
             {photos.map((photo, index) => (
               <button
                 key={photo.key}
                 type="button"
                 onClick={() => setStep({ kind: "photos" })}
-                className="space-y-1 text-left"
+                className="text-left"
               >
                 <PhotoImage photo={photo} alt={photo.caption || `Photo ${index + 1}`} />
-                {photo.caption ? <span className="block truncate text-sm text-neutral-600">{photo.caption}</span> : null}
               </button>
             ))}
           </div>
         ) : null}
-        <div className="divide-y divide-neutral-200 rounded-md border border-neutral-200">
+        <div className="rounded-2xl border border-line bg-white px-4">
           {savedCount === 0 ? (
             <ReviewRow
               label="Your description"
@@ -676,9 +676,14 @@ export function IntakeWizard({
           ))}
           <ReviewRow label="Anything else" value={note ? `“${note}”` : "Nothing added"} onClick={() => setStep({ kind: "note" })} />
         </div>
-        <p className="text-sm leading-6 text-neutral-500">
-          {questions.length ? "The questions were written by AI from what you sent; the answers are yours. " : ""}
-          Your photos and answers will be processed with AI and shared with {businessName} to prepare for the visit.
+        {submitError ? (
+          <p role="alert" className="mt-3 rounded-xl bg-danger-soft p-3 text-[15px] text-danger">
+            {submitError}
+          </p>
+        ) : null}
+        <p className="mt-3 text-sm text-muted">
+          {questions.length ? "Questions were written by AI from what you sent; the answers are yours. " : ""}
+          Your photos and answers are processed with AI and shared with {businessName} to prepare for the visit.
         </p>
       </Screen>
     );
@@ -686,47 +691,66 @@ export function IntakeWizard({
 
   return (
     <Screen embedded={embedded}>
-      <h1 className="text-2xl font-semibold tracking-tight">Sent to {firstName}</h1>
-      <p className="text-base leading-7 text-neutral-700">
-        They’ll be in touch{businessPhone ? ` from ${businessPhone}` : ""} to set a time. {firstName} reviews what you
-        sent first so they can bring the likely part.
-      </p>
-      <p className="text-sm text-neutral-500">
-        This isn’t a confirmed appointment. You can close this page.
-      </p>
+      <div className="pt-8 text-center">
+        <div className="mx-auto grid h-19 w-19 place-items-center rounded-full bg-ok-soft text-4xl text-ok">✓</div>
+        <h1 className="mt-4 font-display text-[28px] font-bold">Sent to {firstName}</h1>
+        <p className="mt-1 text-muted">
+          They’ll be in touch{businessPhone ? ` from ${businessPhone}` : ""} to set a time.
+        </p>
+      </div>
+      <div className="mt-6 rounded-2xl border border-line bg-white p-4">
+        <span className="text-[11.5px] font-bold uppercase tracking-widest text-muted">What happens next</span>
+        <p className="mt-1.5">{firstName} reviews what you sent and brings the likely part, so it can be one visit.</p>
+      </div>
+      <p className="mt-4 text-center text-sm text-muted">This isn’t a confirmed appointment. You can close this page.</p>
     </Screen>
   );
 }
 
 /* ---------- pieces ---------- */
 
-// Same plain layout as the rest of the app: one centered column, actions
-// below the content.
+// Mobile-first column with a sticky action bar at the bottom.
 function Screen({
   children,
   action,
   embedded,
   back,
+  corner,
 }: {
   children: ReactNode;
   action?: ReactNode;
   back?: () => void;
+  corner?: string;
   embedded?: boolean;
 }) {
   return (
-    <div className={`bg-white text-neutral-950 ${embedded ? "rounded-lg p-6" : "min-h-dvh px-6 py-10"}`}>
-      <div className={`mx-auto flex w-full max-w-md flex-col gap-6 ${embedded ? "" : "min-h-[calc(100dvh-5rem)] justify-center"}`}>
-        {back ? (
-          <button type="button" onClick={back} className="self-start text-sm text-neutral-600 underline">
-            ← Back
-          </button>
+    <div className={`flex flex-col bg-page text-[17px] text-ink ${embedded ? "min-h-[640px] rounded-lg" : "min-h-dvh"}`}>
+      <div className="mx-auto w-full max-w-[520px] flex-1 px-5 pb-6 pt-5">
+        {back || corner ? (
+          <div className="mb-3 flex items-center justify-between">
+            {back ? (
+              <button type="button" onClick={back} className="min-h-12 font-bold text-accent-strong">
+                ← Back
+              </button>
+            ) : (
+              <span />
+            )}
+            {corner ? <span className="text-sm text-muted">{corner}</span> : null}
+          </div>
         ) : null}
         {children}
-        {action ? <div className="flex flex-col gap-3">{action}</div> : null}
       </div>
+      {action ? (
+        <div className="sticky bottom-0 border-t border-line bg-page">
+          <div className="mx-auto flex w-full max-w-[520px] gap-2 px-5 pb-5 pt-3">{action}</div>
+        </div>
+      ) : null}
     </div>
   );
 }
+
+const buttonBase =
+  "inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl px-5 font-bold disabled:cursor-not-allowed disabled:opacity-40";
 
 function Primary({
   children,
@@ -738,9 +762,91 @@ function Primary({
   disabled?: boolean;
 }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className={primaryButtonClassName}>
+    <button type="button" onClick={onClick} disabled={disabled} className={`${buttonBase} flex-[2] bg-accent text-accent-ink`}>
       {children}
     </button>
+  );
+}
+
+function Secondary({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={`${buttonBase} flex-1 border-[1.5px] border-line bg-white`}>
+      {children}
+    </button>
+  );
+}
+
+// The shots that help most, ticked off as photos are added. Generic on
+// purpose: the link doesn't know the trade.
+const PHOTO_CHECKLIST = [
+  ["The whole thing", "the unit, appliance, or area that isn’t working"],
+  ["A close-up of the problem", "a leak, damage, or an error on a screen"],
+  ["The brand or model sticker", "only if it’s easy to see"],
+] as const;
+
+function PhotoChecklist({ count }: { count: number }) {
+  return (
+    <ol className="rounded-2xl border border-line bg-white px-4">
+      {PHOTO_CHECKLIST.map(([title, hint], i) => {
+        const done = i < count;
+        return (
+          <li key={title} className="flex items-start gap-3 border-t border-line py-3 first:border-t-0">
+            <span
+              aria-hidden
+              className={`grid h-6.5 w-6.5 shrink-0 place-items-center rounded-full text-[13px] font-extrabold ${
+                done ? "bg-accent text-accent-ink" : "bg-chip text-muted"
+              }`}
+            >
+              {done ? "✓" : i + 1}
+            </span>
+            <div className="text-[15px]">
+              <b>{title}</b>
+              <span className="sr-only">{done ? " (added)" : ""}</span>
+              <p className="text-sm text-muted">{hint}</p>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function ReadingLine({
+  state,
+  label,
+  result,
+}: {
+  state: "done" | "active" | "todo";
+  label: string;
+  result?: string;
+}) {
+  return (
+    <li className="flex items-start gap-3 border-b border-line py-3">
+      <span
+        aria-hidden
+        className={`grid h-6.5 w-6.5 shrink-0 place-items-center rounded-full text-[13px] font-extrabold ${
+          state === "done"
+            ? "bg-accent text-accent-ink"
+            : state === "active"
+              ? "animate-spin border-[3px] border-line border-t-accent-strong"
+              : "bg-chip"
+        }`}
+      >
+        {state === "done" ? "✓" : ""}
+      </span>
+      <div>
+        <b>{label}</b>
+        <p className="text-sm text-muted">{result ?? "…"}</p>
+      </div>
+    </li>
   );
 }
 
@@ -748,8 +854,8 @@ function Primary({
 function SafetyNotice({ concern, firstName }: { concern: string | null; firstName: string }) {
   if (!concern) return null;
   return (
-    <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">
-      Something you sent may need attention soon. If you smell gas, see smoke or sparks, or there’s water near
+    <p role="alert" className="mt-4 rounded-xl bg-danger-soft p-3 text-[15px] font-semibold text-danger">
+      ⚠ Something you sent may need attention soon. If you smell gas, see smoke or sparks, or there’s water near
       anything electrical, leave the area and call 911 or your utility’s emergency line. We’ve flagged this for{" "}
       {firstName}.
     </p>
@@ -834,44 +940,34 @@ function QuestionStep({
     <Screen
       embedded={embedded}
       back={onBack}
+      corner={`Question ${number}`}
       action={
         <>
+          {question.allowUnknown && question.type !== "yes_no_unknown" ? (
+            <Secondary disabled={saving} onClick={() => void save({ kind: "unknown" })}>
+              I don’t know
+            </Secondary>
+          ) : null}
           <Primary
             disabled={saving || photoPending || (question.required && !answer)}
             onClick={() => void save(answer ?? { kind: "skipped" })}
           >
             {saving ? "Saving…" : answer || question.required ? "Next" : "Skip"}
           </Primary>
-          {question.allowUnknown && question.type !== "yes_no_unknown" ? (
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void save({ kind: "unknown" })}
-              className={secondaryButtonClassName}
-            >
-              I don’t know
-            </button>
-          ) : null}
-          {error ? (
-            <p role="alert" className="text-sm text-red-700">
-              {error}
-            </p>
-          ) : null}
         </>
       }
     >
       {/* No total: the number of questions can change as the customer answers. */}
-      <div className="space-y-1">
-        <p className="text-sm text-neutral-500">Question {number}</p>
-        <p className="text-xs text-neutral-500">Written by AI from what you sent.</p>
-      </div>
-      <fieldset className="flex flex-col gap-4">
-        <legend className="mb-2 text-2xl font-semibold tracking-tight">
+      <p className="mb-3 flex gap-2 rounded-xl bg-accent-soft px-3 py-2.5 text-sm">
+        <span aria-hidden>💡</span>
+        <span>{question.reason}</span>
+      </p>
+      <fieldset>
+        <legend className="font-display text-2xl font-bold leading-tight">
           {question.label}
           {question.required ? <span className="sr-only"> (required)</span> : null}
         </legend>
-        {question.help ? <p className="text-base leading-7 text-neutral-700">{question.help}</p> : null}
-        <p className="text-sm text-neutral-500">Why we’re asking: {question.reason}</p>
+        {question.help ? <p className="mb-4 mt-1.5 text-[15px] text-muted">{question.help}</p> : <div className="mb-4" />}
 
         {question.type === "short_text" || question.type === "long_text" ? (
           <>
@@ -885,7 +981,7 @@ function QuestionStep({
                 value={text}
                 maxLength={200}
                 onChange={(e) => setText(e.target.value)}
-                className={inputClassName}
+                className={`${inputClassName} w-full text-[17px]`}
               />
             ) : (
               <textarea
@@ -894,14 +990,14 @@ function QuestionStep({
                 rows={4}
                 maxLength={MAX_TEXT_ANSWER_LENGTH}
                 onChange={(e) => setText(e.target.value)}
-                className={`${inputClassName} h-auto py-2`}
+                className={`${inputClassName} h-auto w-full py-3 text-[17px]`}
               />
             )}
           </>
         ) : null}
 
         {question.type === "single_select" || question.type === "yes_no_unknown" || question.type === "multi_select" ? (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2.5">
             {options.map((option) => {
               const multi = question.type === "multi_select";
               const selected = multi ? choices.includes(option) : choice === option;
@@ -915,16 +1011,16 @@ function QuestionStep({
                       ? setChoices((prev) => (prev.includes(option) ? prev.filter((c) => c !== option) : [...prev, option]))
                       : setChoice(option)
                   }
-                  className={`flex h-11 items-center justify-between rounded-md border px-4 text-left text-sm font-medium ${
-                    selected ? "border-neutral-900 bg-neutral-100" : "border-neutral-300 bg-white"
+                  className={`flex min-h-[58px] items-center justify-between rounded-2xl border-[1.5px] px-4 text-left font-semibold ${
+                    selected ? "border-accent-strong bg-accent-soft" : "border-line bg-white"
                   }`}
                 >
                   {option}
-                  {selected ? <span aria-hidden>✓</span> : null}
+                  {selected ? <span className="font-extrabold text-accent-strong">✓</span> : null}
                 </button>
               );
             })}
-            {question.type === "multi_select" ? <p className="text-sm text-neutral-500">Choose all that apply.</p> : null}
+            {question.type === "multi_select" ? <p className="text-sm text-muted">Choose all that apply.</p> : null}
           </div>
         ) : null}
 
@@ -939,9 +1035,9 @@ function QuestionStep({
               inputMode="decimal"
               value={numberText}
               onChange={(e) => setNumberText(e.target.value)}
-              className={`${inputClassName} w-32`}
+              className={`${inputClassName} w-32 text-[17px]`}
             />
-            {question.unit ? <span className="text-sm text-neutral-700">{question.unit}</span> : null}
+            {question.unit ? <span className="text-muted">{question.unit}</span> : null}
           </div>
         ) : null}
 
@@ -953,28 +1049,34 @@ function QuestionStep({
                 <UploadStatus upload={photo.upload} onRetry={() => setPhotoKey(null)} />
               </>
             ) : saved?.kind === "photo" ? (
-              <p className="text-sm text-neutral-600">You already sent a photo for this.</p>
+              <p className="text-sm text-muted">You already sent a photo for this.</p>
             ) : null}
             {canAddPhoto || photo ? (
-              <div className="flex flex-col gap-3">
+              <div className="flex gap-2">
+                <PhotoInput disabled={photoPending} variant="secondary" onFiles={(files) => setPhotoKey(onAddPhoto(files[0]))}>
+                  Upload
+                </PhotoInput>
                 <PhotoInput
                   capture
+                  grow
                   disabled={photoPending}
                   variant={photo ? "secondary" : "primary"}
                   onFiles={(files) => setPhotoKey(onAddPhoto(files[0]))}
                 >
-                  {photo ? "Take a different photo" : "Take a photo"}
-                </PhotoInput>
-                <PhotoInput disabled={photoPending} variant="secondary" onFiles={(files) => setPhotoKey(onAddPhoto(files[0]))}>
-                  Upload a photo
+                  {photo ? "📷 Retake" : "📷 Take photo"}
                 </PhotoInput>
               </div>
             ) : (
-              <p className="text-sm text-neutral-500">You’ve added the most photos you can. You can skip this one.</p>
+              <p className="text-sm text-muted">You’ve added the most photos you can. You can skip this one.</p>
             )}
           </div>
         ) : null}
       </fieldset>
+      {error ? (
+        <p role="alert" className="mt-3 text-sm font-medium text-danger">
+          {error}
+        </p>
+      ) : null}
       <SafetyNotice concern={urgentConcern} firstName={firstName} />
     </Screen>
   );
@@ -986,6 +1088,7 @@ function PhotoInput({
   capture,
   multiple,
   variant = "primary",
+  grow,
   disabled,
   compact,
 }: {
@@ -994,21 +1097,22 @@ function PhotoInput({
   capture?: boolean;
   multiple?: boolean;
   variant?: "primary" | "secondary";
+  grow?: boolean;
   disabled?: boolean;
   /** A small text-style control, for photo card actions. */
   compact?: boolean;
 }) {
   const className = compact
-    ? "text-sm underline"
-    : variant === "primary"
-      ? primaryButtonClassName
-      : secondaryButtonClassName;
+    ? "inline-flex min-h-10 items-center text-sm font-bold text-accent-strong"
+    : `${buttonBase} ${grow ? "flex-[2]" : "flex-1"} ${
+        variant === "primary" ? "bg-accent text-accent-ink" : "border-[1.5px] border-line bg-white"
+      }`;
   return (
     <label
       aria-disabled={disabled}
       className={`${className} ${
-        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
-      } has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-neutral-900/30`}
+        disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer"
+      } has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-strong`}
     >
       {children}
       <input
@@ -1032,7 +1136,7 @@ function PhotoInput({
 
 function PhotoImage({ photo, alt }: { photo: Photo; alt: string }) {
   return (
-    <div className="aspect-[4/3] w-full overflow-hidden rounded-md border border-neutral-200 bg-neutral-100">
+    <div className="aspect-[4/3] w-full overflow-hidden rounded-xl border border-line bg-chip">
       {/* eslint-disable-next-line @next/next/no-img-element -- local blob or short-lived signed URL */}
       <img
         src={photo.url}
@@ -1067,40 +1171,40 @@ function PhotoCard({
 }) {
   const label = `Photo ${index + 1}`;
   const busy = photo.busy !== null || photo.upload.status === "uploading";
-  const actionClassName = "text-sm underline disabled:no-underline disabled:opacity-50";
+  const actionClassName = "min-h-10 text-sm font-bold text-accent-strong disabled:opacity-40";
   return (
-    <li className="flex flex-col gap-3 rounded-md border border-neutral-200 p-3">
+    <li className="flex flex-col gap-3 rounded-2xl border border-line bg-white p-3">
       <PhotoImage photo={photo} alt={photo.caption || label} />
       <UploadStatus upload={photo.upload} onRetry={onRetry} />
       <div className="flex flex-col gap-1.5">
-        <label htmlFor={`caption-${photo.key}`} className="text-sm font-medium">
-          What does this show? <span className="font-normal text-neutral-500">(optional)</span>
+        <label htmlFor={`caption-${photo.key}`} className="text-[13px] font-bold">
+          What does this show? <span className="font-normal text-muted">(optional)</span>
         </label>
         <input
           id={`caption-${photo.key}`}
           type="text"
           value={photo.caption}
           maxLength={INTAKE_CAPTION_MAX_LENGTH}
-          placeholder="e.g. Water under the sink"
+          placeholder="e.g. The outdoor unit"
           onChange={(e) => onCaption(e.target.value)}
           onBlur={onCaptionDone}
           className={inputClassName}
         />
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <span className="text-sm font-medium text-neutral-700">{label}</span>
+      <div className="flex flex-wrap items-center gap-x-4">
+        <span className="text-sm font-bold text-muted">{label}</span>
         <button type="button" onClick={onRotate} disabled={!canRotate || busy} className={actionClassName}>
           {photo.busy === "rotating" ? "Rotating…" : "Rotate"}
         </button>
         <PhotoInput compact onFiles={(files) => onReplace(files[0])} disabled={busy}>
-          Replace
+          Retake
         </PhotoInput>
         <button type="button" onClick={onRemove} disabled={busy} className={actionClassName}>
           {photo.busy === "removing" ? "Removing…" : "Remove"}
         </button>
       </div>
       {photo.error ? (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm font-medium text-danger">
           {photo.error}
         </p>
       ) : null}
@@ -1145,15 +1249,12 @@ function NoPhotoStep({
         </Primary>
       }
     >
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="no-photo-description" className="text-2xl font-semibold tracking-tight">
-          Tell us what’s wrong
-        </label>
-        <p className="text-base leading-7 text-neutral-700">
-          No problem if you can’t take a photo. Describe what you see, hear, or smell, where it is, and when it
-          started.
-        </p>
-      </div>
+      <label htmlFor="no-photo-description" className="block font-display text-2xl font-bold leading-tight">
+        Tell us what’s wrong
+      </label>
+      <p className="mb-3 mt-1.5 text-[15px] text-muted">
+        No problem if you can’t take a photo. Describe what you see, hear, or smell, where it is, and when it started.
+      </p>
       <textarea
         id="no-photo-description"
         value={text}
@@ -1165,15 +1266,15 @@ function NoPhotoStep({
         maxLength={INTAKE_DESCRIPTION_MAX_LENGTH}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? "no-photo-error" : undefined}
-        placeholder="e.g. The kitchen sink drains slowly and there’s water in the cabinet underneath. Started yesterday."
-        className={`${inputClassName} h-auto py-2`}
+        placeholder="e.g. The AC runs but the air is warm. The outdoor fan isn’t spinning. Started yesterday."
+        className={`${inputClassName} h-auto w-full py-3 text-[17px]`}
       />
       {error ? (
-        <p id="no-photo-error" role="alert" className="text-sm text-red-700">
+        <p id="no-photo-error" role="alert" className="mt-2 text-sm font-medium text-danger">
           {error}
         </p>
       ) : null}
-      <button type="button" onClick={onBack} className="self-start text-sm underline">
+      <button type="button" onClick={onBack} className="mt-3 min-h-12 font-bold text-accent-strong">
         Add a photo instead
       </button>
     </Screen>
@@ -1190,24 +1291,24 @@ function UploadStatus({
 }) {
   if (upload.status === "local") return null;
   if (upload.status === "saved") {
-    return <p className="text-sm text-neutral-500">Photo saved</p>;
+    return <p className="text-sm font-semibold text-ok">✓ Photo saved</p>;
   }
   if (upload.status === "uploading") {
     const percent = Math.round(upload.progress * 100);
     return (
       <div aria-live="polite" className="space-y-1">
-        <p className="text-sm text-neutral-500">{percent < 100 ? `Saving photo… ${percent}%` : "Saving photo…"}</p>
-        <div className="h-1.5 overflow-hidden rounded-full bg-neutral-200">
-          <div className="h-full bg-neutral-900" style={{ width: `${percent}%` }} />
+        <p className="text-sm text-muted">{percent < 100 ? `Saving photo… ${percent}%` : "Saving photo…"}</p>
+        <div className="h-1.5 overflow-hidden rounded-full bg-chip">
+          <div className="h-full bg-accent-strong transition-[width]" style={{ width: `${percent}%` }} />
         </div>
       </div>
     );
   }
   return (
-    <div role="alert" className="flex items-center justify-between gap-3 text-sm text-red-700">
+    <div role="alert" className="flex items-center justify-between gap-3 rounded-xl bg-danger-soft p-3 text-[15px] text-danger">
       <span>{upload.error}</span>
       {upload.retryable ? (
-        <button type="button" onClick={() => onRetry(upload)} className="shrink-0 underline">
+        <button type="button" onClick={() => onRetry(upload)} className="shrink-0 font-bold underline">
           Try again
         </button>
       ) : null}
@@ -1249,9 +1350,27 @@ function uploadPhoto(
 
 function ReviewRow({ label, value, onClick }: { label: string; value: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="flex w-full justify-between gap-3 px-4 py-3 text-left text-sm">
-      <span className="text-neutral-600">{label}</span>
-      <span className="text-right font-medium">{value}</span>
+    <button type="button" onClick={onClick} className="flex min-h-12 w-full justify-between gap-3 border-t border-line py-3 text-left first:border-t-0">
+      <span className="text-muted">{label}</span>
+      <span className="text-right font-bold">{value}</span>
     </button>
   );
+}
+
+function Effort({ big, label }: { big: string; label: string }) {
+  return (
+    <div className="rounded-2xl border border-line bg-white p-3">
+      <b className="block font-display text-2xl">{big}</b>
+      {label}
+    </div>
+  );
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter((w) => /^[A-Za-z]/.test(w))
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
 }

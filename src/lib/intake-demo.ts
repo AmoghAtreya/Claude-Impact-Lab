@@ -5,6 +5,7 @@ import type { IntakeAnalysisView } from "@/lib/intake-questions";
 // renders both the same way.
 
 const DEMO_ANALYSIS: IntakeAnalysisView = {
+  seen: ["Carrier outdoor AC unit · label found", "Thermostat set to Cool, 72°, room at 81°"],
   photoIssues: [],
   urgentConcern: null,
   questions: [

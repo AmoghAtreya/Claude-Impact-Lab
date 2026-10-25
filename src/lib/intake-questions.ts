@@ -141,6 +141,8 @@ export type PhotoIssue = {
 
 // What the customer's browser gets back from the initial analysis.
 export type IntakeAnalysisView = {
+  /** Short lines on what the AI read in the photos ("Carrier AC · model 24ACC636"), shown to the customer. */
+  seen: string[];
   questions: IntakeQuestion[];
   photoIssues: PhotoIssue[];
   /** Set when something reported may be urgent; shown with safety guidance. */
