@@ -144,19 +144,6 @@ async function RequestDetail({
           {[request.serviceAddress, request.issueDescription?.split("\n")[0]].filter(Boolean).join(" · ") ||
             `Created ${formatDateTime.format(new Date(request.createdAt))}`}
         </p>
-        {quickActions.length ? (
-          <div className="mt-2 grid grid-cols-3 gap-1.5">
-            {quickActions.map(([label, href]) => (
-              <a
-                key={label}
-                href={href}
-                className="grid min-h-12 place-items-center rounded-xl border-[1.5px] border-line bg-white text-sm font-bold"
-              >
-                {label}
-              </a>
-            ))}
-          </div>
-        ) : null}
       </header>
 
       {created ? (
@@ -222,8 +209,24 @@ async function RequestDetail({
       ) : null}
 
       <details className="rounded-2xl border border-line bg-white px-4 py-3">
-        <summary className="flex min-h-10 cursor-pointer items-center font-bold">Job details</summary>
+        <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-3 font-bold">
+          Job details
+          <span className="text-sm font-normal text-muted">Call · Text · Directions</span>
+        </summary>
         <div className="mt-3 flex flex-col gap-4">
+          {quickActions.length ? (
+            <div className="grid grid-cols-3 gap-1.5">
+              {quickActions.map(([label, href]) => (
+                <a
+                  key={label}
+                  href={href}
+                  className="grid min-h-12 place-items-center rounded-xl border-[1.5px] border-line bg-white text-sm font-bold"
+                >
+                  {label}
+                </a>
+              ))}
+            </div>
+          ) : null}
           <div>
             <div className="mb-2 flex items-center justify-between gap-4">
               <span className="text-xs font-bold uppercase tracking-wider text-muted">Customer and job</span>
