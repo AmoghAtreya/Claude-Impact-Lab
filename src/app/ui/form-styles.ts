@@ -1,15 +1,19 @@
-export const labelClassName = "text-sm font-medium";
+// Shared form styles, using the OneTrip tokens in globals.css. Touch targets
+// stay ≥ 48px and inputs ≥ 16px so iOS doesn't zoom on focus.
+
+export const labelClassName = "text-[13px] font-bold text-ink";
 
 export const inputClassName =
-  "h-10 rounded-md border border-neutral-300 bg-white px-3 text-base focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/10";
+  "h-12 rounded-xl border-[1.5px] border-line bg-white px-3 text-base text-ink focus:border-ink focus:outline-none focus:ring-2 focus:ring-accent";
 
 export const primaryButtonClassName =
-  "inline-flex h-10 items-center justify-center rounded-md bg-neutral-900 px-4 text-sm font-medium text-white disabled:opacity-60";
+  "inline-flex min-h-13 items-center justify-center rounded-2xl bg-accent px-5 text-base font-bold text-accent-ink hover:brightness-95 disabled:opacity-40";
 
 export const secondaryButtonClassName =
-  "inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-medium disabled:opacity-60";
+  "inline-flex min-h-13 items-center justify-center rounded-2xl border-[1.5px] border-line bg-white px-5 text-base font-bold text-ink disabled:opacity-40";
 
-export const statusClassName =
-  "rounded-md border border-neutral-200 bg-neutral-50 p-4 text-sm leading-6 text-neutral-800";
+export const statusClassName = "rounded-xl bg-chip p-4 text-[15px] leading-6 text-ink";
 
-export const fieldErrorClassName = "text-sm text-red-700";
+export const fieldErrorClassName = "text-sm font-medium text-danger";
+
+export const textLinkClassName = "font-bold text-accent-strong underline underline-offset-2";

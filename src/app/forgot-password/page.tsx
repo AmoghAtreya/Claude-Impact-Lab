@@ -1,30 +1,29 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { AuthShell } from "@/app/auth/auth-shell";
+import { textLinkClassName } from "@/app/ui/form-styles";
 import { ForgotPasswordForm } from "./forgot-password-form";
 
 export default function ForgotPasswordPage({
   searchParams,
 }: PageProps<"/forgot-password">) {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 px-6 py-16">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Reset your password
-        </h1>
-        <p className="text-base leading-7 text-neutral-700">
-          Enter your account email and we&apos;ll send you a reset link.
+    <AuthShell
+      title="Reset your password"
+      intro="Enter your account email and we’ll send you a reset link."
+      footer={
+        <p>
+          Remembered it?{" "}
+          <Link href="/login" className={textLinkClassName}>
+            Back to log in
+          </Link>
         </p>
-      </div>
+      }
+    >
       <Suspense>
         <Form searchParams={searchParams} />
       </Suspense>
-      <p className="text-sm text-neutral-700">
-        Remembered it?{" "}
-        <Link href="/login" className="underline">
-          Back to log in
-        </Link>
-      </p>
-    </main>
+    </AuthShell>
   );
 }
 

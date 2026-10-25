@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Logo } from "@/app/ui/logo";
 
 const HERO_PINS = [
   { n: 1, x: 66.5, y: 43 },
@@ -249,14 +250,6 @@ function HeroDemo() {
   );
 }
 
-function Logo() {
-  return (
-    <span className="flex items-center gap-2 font-display text-lg font-extrabold">
-      <span className="grid h-6 w-6 place-items-center rounded-md bg-accent text-[13px] text-accent-ink">1</span>
-      OneTrip
-    </span>
-  );
-}
 
 function Section({ id, children }: { id?: string; children: React.ReactNode }) {
   return (
