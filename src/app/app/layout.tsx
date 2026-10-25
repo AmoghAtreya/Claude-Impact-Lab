@@ -15,11 +15,16 @@ export default function PortalLayout({ children }: LayoutProps<"/app">) {
           <Suspense fallback={<span className="h-5" />}>
             <WorkspaceName />
           </Suspense>
-          <form action={logout}>
-            <button type="submit" className="text-sm text-neutral-700 underline">
-              Log out
-            </button>
-          </form>
+          <div className="flex shrink-0 items-center gap-4">
+            <Link href="/app/settings" className="text-sm text-neutral-700 underline">
+              Settings
+            </Link>
+            <form action={logout}>
+              <button type="submit" className="text-sm text-neutral-700 underline">
+                Log out
+              </button>
+            </form>
+          </div>
         </div>
       </header>
       {children}

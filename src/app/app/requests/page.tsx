@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { primaryButtonClassName } from "@/app/ui/form-styles";
+import { primaryButtonClassName, statusClassName } from "@/app/ui/form-styles";
 import {
   ANALYSIS_STATUS_LABELS,
   hasActiveFilters,
@@ -31,10 +31,28 @@ export default function RequestsPage({
           New request
         </Link>
       </div>
+      <Suspense fallback={null}>
+        <DeletedNotice searchParams={searchParams} />
+      </Suspense>
       <Suspense fallback={<p className="text-sm text-neutral-500">Loading…</p>}>
         <RequestList searchParams={searchParams} />
       </Suspense>
     </main>
+  );
+}
+
+// Shown after a request is deleted from its detail page.
+async function DeletedNotice({
+  searchParams,
+}: Pick<PageProps<"/app/requests">, "searchParams">) {
+  const { deleted } = await searchParams;
+  if (typeof deleted !== "string" || !/^[0-9]{1,9}$/.test(deleted)) {
+    return null;
+  }
+  return (
+    <p role="status" className={statusClassName}>
+      Request {requestReference(Number(deleted))} and its photos were deleted.
+    </p>
   );
 }
 

@@ -15,6 +15,8 @@ export type Workspace = {
   contactEmail: string | null;
   contactPhone: string | null;
   timezone: string;
+  intakeLinkExpiryDays: number;
+  photoRetentionDays: number;
   role: WorkspaceRole;
 };
 
@@ -28,6 +30,8 @@ type MembershipRow = {
     contact_email: string | null;
     contact_phone: string | null;
     timezone: string;
+    intake_link_expiry_days: number;
+    photo_retention_days: number;
   } | null;
 };
 
@@ -40,7 +44,7 @@ export const getCurrentWorkspace = cache(
     const { data, error } = await supabase
       .from("organization_members")
       .select(
-        "role, organizations (id, name, trade, trade_other, contact_email, contact_phone, timezone)",
+        "role, organizations (id, name, trade, trade_other, contact_email, contact_phone, timezone, intake_link_expiry_days, photo_retention_days)",
       )
       .eq("user_id", user.id)
       .order("created_at")
@@ -66,11 +70,17 @@ export const getCurrentWorkspace = cache(
         contactEmail: org.contact_email,
         contactPhone: org.contact_phone,
         timezone: org.timezone,
+        intakeLinkExpiryDays: org.intake_link_expiry_days,
+        photoRetentionDays: org.photo_retention_days,
         role: data.role,
       },
     };
   },
 );
+
+export function canManageWorkspace(workspace: Workspace) {
+  return workspace.role === "owner" || workspace.role === "admin";
+}
 
 // Use in every portal page and server operation. Signed-out users go to
 // /login; signed-in users without a workspace go to /onboarding.
