@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { statusClassName } from "@/app/ui/form-styles";
+import { getRequestEstimates } from "@/lib/estimates";
 import { getRequestIntake } from "@/lib/intake-ai";
 import { intakeUrl } from "@/lib/intake-links";
 import { listRequestPhotos } from "@/lib/intake-photos";
@@ -17,8 +18,13 @@ import { GroupedRequests } from "../request-cards";
 import { canManageWorkspace, requireWorkspace } from "@/lib/workspace";
 import { MarkReviewedButton } from "./brief-actions";
 import { BriefStatus, BriefTab, briefRefs, CustomerAnswersTab, DetailedAnalysisTab } from "./brief-panel";
+import { EstimatePanel } from "./estimate-panel";
 import { IntakeLinkPanel } from "./intake-link-panel";
 import { ManageRequestPanel } from "./manage-request-panel";
+
+// Retrying a brief or redrafting an estimate runs AI work after the action
+// responds; give it room.
+export const maxDuration = 300;
 
 export default function RequestPage({
   params,
@@ -91,9 +97,10 @@ async function RequestDetail({
   });
   const link = request.activeLink;
   const expiresAt = link ? new Date(link.expiresAt) : null;
-  const [photos, intake] = await Promise.all([
+  const [photos, intake, estimates] = await Promise.all([
     listRequestPhotos(workspace.id, request.id),
     getRequestIntake(workspace.id, request.id),
+    workspace.estimatesEnabled ? getRequestEstimates(workspace.id, request.id) : null,
   ]);
 
   const tab = tabParam === "answers" || tabParam === "analysis" ? tabParam : "brief";
@@ -206,6 +213,16 @@ async function RequestDetail({
             <BriefTab brief={intake.brief.brief} photos={photos} intake={intake} customerName={request.customerName} />
           ) : null}
         </>
+      ) : null}
+
+      {estimates ? (
+        <EstimatePanel
+          requestId={request.id}
+          data={estimates}
+          canApprove={canManageWorkspace(workspace)}
+          hasActiveLink={Boolean(link && !link.expired)}
+          formatDateTime={(iso) => formatDateTime.format(new Date(iso))}
+        />
       ) : null}
 
       <details className="rounded-2xl border border-line bg-white px-4 py-3">

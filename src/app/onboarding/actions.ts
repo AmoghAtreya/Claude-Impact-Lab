@@ -13,7 +13,8 @@ export type OnboardingField =
   | "tradeOther"
   | "contactEmail"
   | "contactPhone"
-  | "timezone";
+  | "timezone"
+  | "estimatesEnabled";
 
 export type OnboardingFormState = {
   error?: string;
@@ -37,6 +38,7 @@ export async function createWorkspace(
     contactEmail: String(formData.get("contactEmail") ?? ""),
     contactPhone: String(formData.get("contactPhone") ?? ""),
     timezone: String(formData.get("timezone") ?? ""),
+    estimatesEnabled: formData.get("estimatesEnabled") === "on" ? "on" : "",
   };
 
   const avatarFile = formData.get("avatar");
@@ -74,7 +76,7 @@ export async function createWorkspace(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("create_organization", {
+  const { data: organizationId, error } = await supabase.rpc("create_organization", {
     p_name: parsed.data.name,
     p_trade: parsed.data.trade,
     p_trade_other: parsed.data.trade === "other" ? parsed.data.tradeOther : null,
@@ -90,6 +92,13 @@ export async function createWorkspace(
       error: "We couldn't create your workspace. Please try again.",
       values,
     };
+  }
+
+  // The owner can update their new workspace through RLS.
+  if (!error && values.estimatesEnabled && typeof organizationId === "string") {
+    await supabase.from("organizations").update({ estimates_enabled: true }).eq("id", organizationId);
+    // Next step: give the AI their pricing to work from.
+    redirect("/app/settings/price-book?welcome=1");
   }
 
   redirect("/app");

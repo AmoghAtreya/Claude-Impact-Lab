@@ -73,6 +73,7 @@ export function IntakeWizard({
   customerName,
   businessPhone,
   embedded = false,
+  estimatesEnabled = false,
   live,
 }: {
   businessName: string;
@@ -80,6 +81,8 @@ export function IntakeWizard({
   businessPhone?: string | null;
   /** Inside the contractor preview card instead of full screen. */
   embedded?: boolean;
+  /** The business uses estimates, so the confirmation mentions one may follow (C10). */
+  estimatesEnabled?: boolean;
   /** A real intake link: everything is saved as it's entered and restored on reload. */
   live?: {
     token: string;
@@ -730,6 +733,11 @@ export function IntakeWizard({
       <div className="mt-6 rounded-2xl border border-line bg-white p-4">
         <span className="text-[11.5px] font-bold uppercase tracking-widest text-muted">What happens next</span>
         <p className="mt-1.5">{firstName} reviews what you sent and brings the likely part, so it can be one visit.</p>
+        {estimatesEnabled ? (
+          <p className="mt-2 text-muted">
+            They may also send a preliminary estimate after reviewing. If they do, you’ll see it at this same link.
+          </p>
+        ) : null}
       </div>
       <p className="mt-4 text-center text-sm text-muted">This isn’t a confirmed appointment. You can close this page.</p>
     </Screen>

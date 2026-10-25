@@ -8,6 +8,7 @@ import {
   primaryButtonClassName,
   statusClassName,
 } from "@/app/ui/form-styles";
+import { CURRENCIES } from "@/lib/money";
 import { TRADE_OTHER_MAX_LENGTH, TRADES } from "@/lib/trades";
 import {
   LINK_EXPIRY_DAYS,
@@ -197,6 +198,42 @@ export function BusinessForm({ canManage, timeZones, initial }: BusinessFormProp
             photos.
           </p>
           {fieldError("photoRetentionDays")}
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-xl border border-line p-4">
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              name="estimatesEnabled"
+              defaultChecked={values.estimatesEnabled === "on"}
+              className="mt-1 size-5 accent-accent-strong"
+            />
+            <span>
+              <span className="block text-[15px] font-bold">Prepare estimates</span>
+              <span className="block text-sm text-muted">
+                After a customer sends their photos, AI drafts a preliminary
+                estimate from your price book. You review and approve it before
+                the customer sees anything.
+              </span>
+            </span>
+          </label>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="currency" className={labelClassName}>
+              Currency
+            </label>
+            <select
+              {...fieldProps("currency")}
+              defaultValue={values.currency}
+              className={`${inputClassName} w-32`}
+            >
+              {CURRENCIES.map((currency) => (
+                <option key={currency} value={currency}>
+                  {currency}
+                </option>
+              ))}
+            </select>
+            {fieldError("currency")}
+          </div>
         </div>
 
         {state.error ? (

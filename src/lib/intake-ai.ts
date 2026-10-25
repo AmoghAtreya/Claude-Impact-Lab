@@ -50,7 +50,7 @@ const AI_ERRORS: Record<Exclude<AiCallResult<unknown>, { ok: true }>["code"], st
   not_configured: "Automatic photo review isn’t set up yet. You can still send what you have.",
 };
 
-type RequestRow = {
+export type RequestRow = {
   id: string;
   organization_id: string;
   customer_name: string;
@@ -63,12 +63,12 @@ type RequestRow = {
   current_intake_revision: number;
 };
 
-const REQUEST_COLUMNS =
+export const REQUEST_COLUMNS =
   "id, organization_id, customer_name, trade, trade_other, issue_description, customer_description, customer_note, intake_status, current_intake_revision";
 
 // Possession of a valid link is access to its intake (spec C7). Returns the
 // request only if the link is unrevoked and unexpired.
-async function resolveIntake(token: string): Promise<RequestRow | null> {
+export async function resolveIntake(token: string): Promise<RequestRow | null> {
   const admin = createAdminClient();
   const { data: link } = await admin
     .from("intake_links")
@@ -91,7 +91,7 @@ const ALREADY_SENT = { ok: false as const, error: "These details were already se
 
 type StoredPhoto = { id: string; storage_path: string; caption: string | null };
 
-async function loadPhotos(requestId: string): Promise<StoredPhoto[]> {
+export async function loadPhotos(requestId: string): Promise<StoredPhoto[]> {
   const { data, error } = await createAdminClient()
     .from("intake_photos")
     .select("id, storage_path, caption")
@@ -123,7 +123,7 @@ async function photoBlocks(photos: StoredPhoto[]): Promise<Anthropic.Beta.BetaCo
   return blocks;
 }
 
-function requestContext(request: RequestRow) {
+export function requestContext(request: RequestRow) {
   const parts = [`Trade: ${tradeLabel(request.trade, request.trade_other)}`];
   if (request.issue_description) {
     parts.push(`What the business already knows (from the contractor): <customer_input>${request.issue_description}</customer_input>`);
@@ -170,11 +170,11 @@ const clip = (text: string, max: number) => text.trim().slice(0, max);
 const clipOrNull = (text: string | null, max: number) => (text && text.trim() ? clip(text, max) : null);
 const percentOrNull = (n: number | null) => (n !== null && Number.isFinite(n) && n >= 0 && n <= 100 ? n : null);
 
-function labelMap(ids: string[], prefix: string) {
+export function labelMap(ids: string[], prefix: string) {
   return new Map(ids.map((id, index) => [`${prefix}${index + 1}`, id]));
 }
 
-function mapLabels(labels: string[], map: Map<string, string>) {
+export function mapLabels(labels: string[], map: Map<string, string>) {
   return [...new Set(labels.map((label) => map.get(label.trim().toUpperCase())).filter((id): id is string => !!id))];
 }
 
@@ -449,7 +449,7 @@ export async function getIntakeProgress(token: string): Promise<{
   return { analysis, answers: await latestAnswers(analysis.questions.map((q) => q.id), admin) };
 }
 
-async function latestAnswers(
+export async function latestAnswers(
   questionIds: string[],
   supabase: ReturnType<typeof createAdminClient> | Awaited<ReturnType<typeof createClient>>,
 ) {
@@ -673,6 +673,11 @@ export async function runBriefJob(jobId: string): Promise<void> {
 
     await admin.from("processing_jobs").update({ status: "succeeded" }).eq("id", job.id);
     await setAnalysisStatus(request.id, "succeeded");
+
+    // Spec §6 stage 5: a final brief starts estimate drafting when the
+    // workspace uses estimates. Imported here to avoid a module cycle.
+    const { draftEstimateAfterBrief } = await import("@/lib/estimates");
+    await draftEstimateAfterBrief(request.organization_id, request.id);
   } catch (error) {
     console.error("Brief job failed", error instanceof Error ? error.message : "unknown");
     await fail("unexpected");
@@ -680,7 +685,7 @@ export async function runBriefJob(jobId: string): Promise<void> {
 }
 
 // Questions from the newest successful analysis: the ones the customer saw.
-async function currentQuestions(
+export async function currentQuestions(
   requestId: string,
   supabase: ReturnType<typeof createAdminClient> | Awaited<ReturnType<typeof createClient>>,
 ): Promise<IntakeQuestion[]> {

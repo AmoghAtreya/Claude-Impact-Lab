@@ -37,6 +37,8 @@ async function BusinessSettings() {
             timezone: workspace.timezone,
             linkExpiryDays: String(workspace.intakeLinkExpiryDays),
             photoRetentionDays: String(workspace.photoRetentionDays),
+            estimatesEnabled: workspace.estimatesEnabled ? "on" : "",
+            currency: workspace.currency,
           }}
         />
       </section>

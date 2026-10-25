@@ -306,6 +306,23 @@ export function OnboardingForm({ defaultEmail, timeZones }: OnboardingFormProps)
         {fieldError("timezone")}
       </div>
 
+      <label className="flex items-start gap-3 rounded-xl border border-line p-4">
+        <input
+          type="checkbox"
+          name="estimatesEnabled"
+          defaultChecked={values.estimatesEnabled === "on"}
+          className="mt-1 size-5 accent-accent-strong"
+        />
+        <span>
+          <span className="block text-[15px] font-bold">Prepare estimates for me</span>
+          <span className="block text-sm text-muted">
+            Upload your price list or past invoices, and AI drafts a preliminary
+            estimate after each customer sends their photos. You approve every
+            estimate before the customer sees it. You can change this later.
+          </span>
+        </span>
+      </label>
+
       {state.error ? (
         <p role="alert" className={fieldErrorClassName}>
           {state.error}

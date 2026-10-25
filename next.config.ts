@@ -8,10 +8,13 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["heic-convert"],
   experimental: {
     serverActions: {
-      // Onboarding accepts a profile picture up to 5 MB, plus multipart
-      // overhead and the other form fields.
-      bodySizeLimit: "6mb",
+      // Price-book documents can be up to 10 MB (profile pictures 5 MB),
+      // plus multipart overhead and the other form fields.
+      bodySizeLimit: "11mb",
     },
+    // The proxy buffers request bodies; keep its cap above the action limit
+    // so large uploads aren't truncated.
+    proxyClientMaxBodySize: "12mb",
   },
   turbopack: {
     rules: {

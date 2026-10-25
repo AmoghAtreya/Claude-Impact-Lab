@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { processAvatar, removeAvatar, saveAvatar } from "@/lib/avatar";
+import { CURRENCIES } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { canManageWorkspace, requireWorkspace } from "@/lib/workspace";
 import {
@@ -19,7 +20,9 @@ export type BusinessField =
   | "contactPhone"
   | "timezone"
   | "linkExpiryDays"
-  | "photoRetentionDays";
+  | "photoRetentionDays"
+  | "estimatesEnabled"
+  | "currency";
 
 export type BusinessFormState = {
   error?: string;
@@ -45,6 +48,8 @@ const businessSchema = workspaceDetailsSchema.and(
         (days) => (PHOTO_RETENTION_OPTIONS as readonly number[]).includes(days),
         { error: "Choose how long to keep photos." },
       ),
+    estimatesEnabled: z.string().transform((value) => value === "on"),
+    currency: z.enum(CURRENCIES, { error: "Choose a currency." }),
   }),
 );
 
@@ -62,6 +67,8 @@ export async function updateBusinessSettings(
     timezone: String(formData.get("timezone") ?? ""),
     linkExpiryDays: String(formData.get("linkExpiryDays") ?? ""),
     photoRetentionDays: String(formData.get("photoRetentionDays") ?? ""),
+    estimatesEnabled: formData.get("estimatesEnabled") === "on" ? "on" : "",
+    currency: String(formData.get("currency") ?? ""),
   };
   if (!canManageWorkspace(workspace)) {
     return { error: "Only owners and admins can change business settings.", values };
@@ -90,6 +97,8 @@ export async function updateBusinessSettings(
       timezone: parsed.data.timezone,
       intake_link_expiry_days: parsed.data.linkExpiryDays,
       photo_retention_days: parsed.data.photoRetentionDays,
+      estimates_enabled: parsed.data.estimatesEnabled,
+      currency: parsed.data.currency,
     })
     .eq("id", workspace.id)
     .select("id");
