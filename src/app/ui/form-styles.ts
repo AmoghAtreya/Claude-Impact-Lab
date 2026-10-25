@@ -6,6 +6,9 @@ export const inputClassName =
 export const primaryButtonClassName =
   "inline-flex h-10 items-center justify-center rounded-md bg-neutral-900 px-4 text-sm font-medium text-white disabled:opacity-60";
 
+export const secondaryButtonClassName =
+  "inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-medium disabled:opacity-60";
+
 export const statusClassName =
   "rounded-md border border-neutral-200 bg-neutral-50 p-4 text-sm leading-6 text-neutral-800";
 
