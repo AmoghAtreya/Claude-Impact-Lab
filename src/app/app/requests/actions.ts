@@ -239,6 +239,27 @@ export async function revokeIntakeLink(requestId: string) {
   return {};
 }
 
+// Marks the brief as reviewed (or back to unreviewed) from the request page.
+// Archived requests stay archived. RLS limits the update to the workspace.
+export async function setRequestReviewed(requestId: string, reviewed: boolean) {
+  const { workspace } = await requireWorkspace();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("service_requests")
+    .update({ review_status: reviewed ? "reviewed" : "unreviewed" })
+    .eq("id", requestId)
+    .eq("organization_id", workspace.id)
+    .neq("review_status", "archived")
+    .select("id");
+  if (error || data.length === 0) {
+    return { error: "We couldn't update the request. Please try again." };
+  }
+
+  revalidatePath(`/app/requests/${requestId}`);
+  revalidatePath("/app/requests");
+  return {};
+}
+
 // Archived requests leave the default list. Restoring treats the request
 // as reviewed, the step before archiving. RLS limits the update to the
 // user's workspace.

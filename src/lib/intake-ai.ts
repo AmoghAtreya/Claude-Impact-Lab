@@ -153,10 +153,14 @@ type StoredAnalysis = {
 export type StoredBrief = {
   summary: string;
   customer_reported: { fact: string; question_ids: string[]; sources: string[] }[];
-  visual_observations: { observation: string; photo_ids: string[] }[];
+  /** x/y: approximate pin in the first photo, percent; absent on briefs before prompt .2. */
+  visual_observations: { observation: string; photo_ids: string[]; x?: number | null; y?: number | null }[];
   equipment: { description: string; make: string | null; model: string | null; serial: string | null; photo_ids: string[] }[];
   symptom_timeline: string | null;
-  possible_explanations: { explanation: string; basis: string }[];
+  /** Most likely first. confidence is absent on briefs before prompt .2. */
+  possible_explanations: { explanation: string; basis: string; confidence?: "high" | "med" | "low" }[];
+  bring?: { item: string; why: string }[];
+  confirm_on_site?: string | null;
   unresolved_questions: string[];
   contradictions: string[];
   urgent_concern: string | null;
@@ -164,6 +168,7 @@ export type StoredBrief = {
 
 const clip = (text: string, max: number) => text.trim().slice(0, max);
 const clipOrNull = (text: string | null, max: number) => (text && text.trim() ? clip(text, max) : null);
+const percentOrNull = (n: number | null) => (n !== null && Number.isFinite(n) && n >= 0 && n <= 100 ? n : null);
 
 function labelMap(ids: string[], prefix: string) {
   return new Map(ids.map((id, index) => [`${prefix}${index + 1}`, id]));
@@ -709,7 +714,7 @@ function validateBrief(output: ServiceBriefOutput, photos: StoredPhoto[], questi
     visual_observations: output.visual_observations.slice(0, 15).flatMap((o) => {
       const ids = mapLabels(o.photos, photoIds);
       // An observation must point at a real photo.
-      return ids.length ? [{ observation: clip(o.observation, 500), photo_ids: ids }] : [];
+      return ids.length ? [{ observation: clip(o.observation, 500), photo_ids: ids, x: percentOrNull(o.x), y: percentOrNull(o.y) }] : [];
     }),
     equipment: output.equipment.slice(0, 5).map((e) => ({
       description: clip(e.description, 200),
@@ -722,7 +727,10 @@ function validateBrief(output: ServiceBriefOutput, photos: StoredPhoto[], questi
     possible_explanations: output.possible_explanations.slice(0, 5).map((e) => ({
       explanation: clip(e.explanation, 500),
       basis: clip(e.basis, 300),
+      confidence: e.confidence,
     })),
+    bring: output.bring.slice(0, 5).map((b) => ({ item: clip(b.item, 200), why: clip(b.why, 300) })),
+    confirm_on_site: clipOrNull(output.confirm_on_site, 300),
     unresolved_questions: output.unresolved_questions.slice(0, 10).map((q) => clip(q, 300)),
     contradictions: output.contradictions.slice(0, 10).map((c) => clip(c, 300)),
     urgent_concern: clipOrNull(output.urgent_concern, 500),

@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { statusClassName } from "@/app/ui/form-styles";
 import { getRequestIntake } from "@/lib/intake-ai";
 import { intakeUrl } from "@/lib/intake-links";
-import { listRequestPhotos, type RequestPhoto } from "@/lib/intake-photos";
+import { listRequestPhotos } from "@/lib/intake-photos";
 import {
   getServiceRequest,
   INTAKE_STATUS_LABELS,
@@ -12,7 +12,8 @@ import {
 } from "@/lib/service-requests";
 import { tradeLabel } from "@/lib/trades";
 import { canManageWorkspace, requireWorkspace } from "@/lib/workspace";
-import { BriefPanel, CustomerAnswers } from "./brief-panel";
+import { MarkReviewedButton } from "./brief-actions";
+import { BriefStatus, BriefTab, briefRefs, CustomerAnswersTab, DetailedAnalysisTab } from "./brief-panel";
 import { IntakeLinkPanel } from "./intake-link-panel";
 import { ManageRequestPanel } from "./manage-request-panel";
 
@@ -36,7 +37,7 @@ async function RequestDetail({
   params,
   searchParams,
 }: Pick<PageProps<"/app/requests/[id]">, "params" | "searchParams">) {
-  const [{ id }, { created, updated }] = await Promise.all([
+  const [{ id }, { created, updated, tab: tabParam }] = await Promise.all([
     params,
     searchParams,
   ]);
@@ -58,6 +59,18 @@ async function RequestDetail({
     getRequestIntake(workspace.id, request.id),
   ]);
 
+  const tab = tabParam === "answers" || tabParam === "analysis" ? tabParam : "brief";
+  const showTabs = request.intakeStatus === "submitted" || Boolean(intake.brief);
+  const linkPanel = (
+    <IntakeLinkPanel
+      requestId={request.id}
+      customerName={request.customerName}
+      businessName={workspace.name}
+      url={link ? await intakeUrl(link.id) : null}
+      expiresLabel={expiresAt ? formatDateTime.format(expiresAt) : null}
+      expired={link?.expired ?? false}
+    />
+  );
   const quickActions = [
     request.customerPhone ? ["📞 Call", `tel:${request.customerPhone}`] : null,
     request.customerPhone ? ["💬 Text", `sms:${request.customerPhone}`] : null,
@@ -120,116 +133,114 @@ async function RequestDetail({
         </p>
       ) : null}
 
-      <BriefPanel
+      <BriefStatus
         requestId={request.id}
         intakeStatus={request.intakeStatus}
         intake={intake}
-        photos={photos}
         customerName={request.customerName}
-        formatDateTime={(iso) => formatDateTime.format(new Date(iso))}
       />
 
-      <CustomerAnswers intake={intake} />
+      {/* Before the customer sends anything, the job is sending the link. */}
+      {showTabs ? null : linkPanel}
 
-      <IntakeLinkPanel
-        requestId={request.id}
-        customerName={request.customerName}
-        businessName={workspace.name}
-        url={link ? await intakeUrl(link.id) : null}
-        expiresLabel={expiresAt ? formatDateTime.format(expiresAt) : null}
-        expired={link?.expired ?? false}
-      />
+      {showTabs ? (
+        <>
+          <nav aria-label="Brief sections" className="grid grid-cols-3 gap-1 rounded-2xl bg-chip p-1">
+            {TABS.map(([key, label]) => (
+              <Link
+                key={key}
+                href={key === "brief" ? `/app/requests/${request.id}` : `/app/requests/${request.id}?tab=${key}`}
+                scroll={false}
+                aria-current={tab === key ? "page" : undefined}
+                className={`grid min-h-11 place-items-center rounded-xl px-2 text-center text-sm font-bold leading-tight ${
+                  tab === key ? "bg-white text-ink shadow-sm" : "text-muted"
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
 
-      <section className="rounded-2xl border border-line bg-white p-5 sm:p-6">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <h2 className="font-display text-lg font-bold">Details</h2>
-          <Link
-            href={`/app/requests/${request.id}/edit`}
-            className="inline-flex min-h-11 items-center rounded-xl border-[1.5px] border-line bg-white px-3 text-sm font-bold"
-          >
-            Edit
-          </Link>
-        </div>
-        <dl className="grid gap-4 sm:grid-cols-[10rem_1fr]">
-          {details.map(([label, value]) => (
-            <div key={label} className="contents">
-              <dt className="text-sm text-muted">{label}</dt>
-              <dd className="whitespace-pre-line text-sm text-ink">
-                {value ?? <span className="text-muted/70">Not provided</span>}
-              </dd>
+          {tab === "answers" ? (
+            <CustomerAnswersTab
+              intake={intake}
+              photos={photos}
+              description={request.customerDescription}
+              limitedVisualInfo={request.limitedVisualInfo}
+            />
+          ) : tab === "analysis" ? (
+            intake.brief ? (
+              <DetailedAnalysisTab
+                brief={intake.brief.brief}
+                refs={briefRefs(intake, photos)}
+                meta={`Written by AI · version ${intake.brief.version} · ${formatDateTime.format(new Date(intake.brief.createdAt))} · ${intake.brief.model}`}
+              />
+            ) : (
+              <p className="rounded-2xl border border-line bg-white p-4 text-[15px] text-muted">No analysis yet.</p>
+            )
+          ) : intake.brief ? (
+            <BriefTab brief={intake.brief.brief} photos={photos} intake={intake} customerName={request.customerName} />
+          ) : null}
+        </>
+      ) : null}
+
+      <details className="rounded-2xl border border-line bg-white px-4 py-3">
+        <summary className="flex min-h-10 cursor-pointer items-center font-bold">Job details</summary>
+        <div className="mt-3 flex flex-col gap-4">
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted">Customer and job</span>
+              <Link
+                href={`/app/requests/${request.id}/edit`}
+                className="inline-flex min-h-10 items-center rounded-xl border-[1.5px] border-line bg-white px-3 text-sm font-bold"
+              >
+                Edit
+              </Link>
             </div>
-          ))}
-        </dl>
-      </section>
-
-      <section className="rounded-2xl border border-line bg-white p-5 sm:p-6">
-        <h2 className="mb-4 font-display text-lg font-bold">Customer photos</h2>
-        {request.limitedVisualInfo ? (
-          <p className="mb-4 rounded-xl border border-caution/40 bg-caution-soft p-3 text-sm text-caution">
-            Limited visual information: the customer couldn&apos;t provide a
-            photo.
-          </p>
-        ) : null}
-        {request.customerDescription ? (
-          <div className="mb-4 space-y-1">
-            <p className="text-sm text-muted">
-              Customer&apos;s description
-            </p>
-            <p className="whitespace-pre-line text-sm text-ink">
-              {request.customerDescription}
-            </p>
+            <dl className="grid grid-cols-[7.5rem_1fr] gap-x-3 gap-y-2 text-[15px]">
+              {details.map(([label, value]) => (
+                <div key={label} className="contents">
+                  <dt className="text-muted">{label}</dt>
+                  <dd className="whitespace-pre-line">{value ?? <span className="text-muted/70">Not provided</span>}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
-        ) : null}
-        {intake.brief && photos.length ? (
-          <p className="text-sm text-muted">The photos are in the brief above. Tap one to see it full size.</p>
-        ) : (
-          <RequestPhotoGallery photos={photos} />
-        )}
-      </section>
+          {showTabs ? linkPanel : null}
+          <ManageRequestPanel
+            requestId={request.id}
+            requestNumber={request.number}
+            archived={request.reviewStatus === "archived"}
+            canDelete={canManageWorkspace(workspace)}
+            photoCount={photos.length}
+            hasActiveLink={Boolean(link && !link.expired)}
+          />
+        </div>
+      </details>
 
-      <ManageRequestPanel
-        requestId={request.id}
-        requestNumber={request.number}
-        archived={request.reviewStatus === "archived"}
-        canDelete={canManageWorkspace(workspace)}
-        photoCount={photos.length}
-        hasActiveLink={Boolean(link && !link.expired)}
-      />
+      {intake.brief ? (
+        <div className="sticky bottom-0 -mx-4 mt-2 border-t border-line bg-page px-4 pb-4 pt-3 sm:-mx-6 sm:px-6">
+          <div className="flex gap-2">
+            {request.customerPhone ? (
+              <a
+                href={`sms:${request.customerPhone}?&body=${encodeURIComponent(
+                  `Hi ${request.customerName.split(" ")[0]}, it’s ${workspace.name}. Could you text me one more photo of the problem? Thanks!`,
+                )}`}
+                className="inline-flex min-h-[52px] flex-1 items-center justify-center rounded-2xl border-[1.5px] border-line bg-white px-4 font-bold"
+              >
+                Ask for a photo
+              </a>
+            ) : null}
+            <MarkReviewedButton requestId={request.id} reviewed={request.reviewStatus === "reviewed"} />
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
 
-function RequestPhotoGallery({ photos }: { photos: RequestPhoto[] }) {
-  if (photos.length === 0) {
-    return <p className="text-sm text-muted/70">No photos yet.</p>;
-  }
-  return (
-    <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-      {photos.map((photo, index) => {
-        const label = photo.caption
-          ? `Photo ${index + 1}: ${photo.caption}`
-          : `Photo ${index + 1}`;
-        return (
-          <li key={photo.id} className="space-y-1.5">
-            <a
-              href={photo.fullUrl ?? undefined}
-              target="_blank"
-              rel="noreferrer"
-              className="block aspect-square overflow-hidden rounded-xl bg-chip"
-            >
-              {photo.thumbnailUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-                <img
-                  src={photo.thumbnailUrl}
-                  alt={label}
-                  className="size-full object-contain"
-                />
-              ) : null}
-            </a>
-            <p className="text-sm text-muted">{label}</p>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
+const TABS = [
+  ["brief", "Brief"],
+  ["answers", "Customer answers"],
+  ["analysis", "Detailed analysis"],
+] as const;
