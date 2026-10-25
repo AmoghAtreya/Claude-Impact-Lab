@@ -2,11 +2,11 @@
 
 ## Overview
 
-The idea is a browser-based service intake app that helps contractors and technicians collect information from customers before a service visit. A contractor sends a customer a link through a familiar messaging channel, such as iMessage or WhatsApp. The customer opens the link and starts by taking or uploading a photo of the problem. AI analyzes the image, generates relevant questions, and adapts its follow-up questions to the customer’s answers. It then analyzes the photos and responses together and automatically updates the contractor portal with a structured service brief. The customer never needs to download an app, create an account, or log in.
+The idea is a browser-based service intake app that helps contractors and technicians collect information from customers before a service visit. A contractor sends a customer a link through a familiar messaging channel, such as iMessage or WhatsApp. The customer opens the link and starts by taking or uploading a photo of the problem. AI analyzes the image, generates relevant questions, and adapts its follow-up questions to the customer’s answers. It then analyzes the photos and responses together and automatically updates the contractor portal with a structured service brief. From that brief and the contractor's own price book, AI drafts a service estimate. The contractor reviews it and releases it to the customer. The customer never needs to download an app, create an account, or log in.
 
 The product has two sides: a contractor-facing component for the service business and a customer-facing component for submitting service information. The central product requirement is to make participation as immediate and frictionless as possible.
 
-This summary combines the original discussion with the subsequent product decisions: photo-first intake, AI-generated adaptive questions, and automatic analysis of customer responses to update the contractor portal. Suggested implementation details are identified separately.
+This summary combines the original discussion with the subsequent product decisions: photo-first intake, AI-generated adaptive questions, automatic analysis of customer responses to update the contractor portal, and a contractor-approved, AI-drafted service estimate. Suggested implementation details are identified separately.
 
 ## The Problem
 
@@ -72,6 +72,16 @@ The intake starts with a photo of the problem. AI analyzes the image and generat
 
 AI analyzes all of the customer’s responses together with the photos and automatically updates the associated service request in the contractor portal. The contractor receives an organized account of the problem rather than having to interpret a collection of raw form answers. The original photos and answers remain available alongside the generated summary.
 
+### 8. AI-drafted, contractor-approved service estimate
+
+After intake is submitted and the brief is generated, AI drafts an estimate for the service:
+
+- **Contractor approves first.** The draft appears only in the contractor portal. The contractor reviews, edits, and approves it before releasing it to the customer. The customer never sees an unreviewed AI estimate.
+- **Prices come from the contractor's price book.** Each business maintains its own rates, such as a service-call fee, labor rates, common repairs, and parts. AI selects the relevant items and likely quantities. Totals are calculated from the stored prices, and AI never invents a dollar amount. Work that the price book does not cover is flagged for the contractor to price.
+- **Range with line items.** The estimate shows a low–high total, likely line items (diagnostic fee, labor, parts), the assumptions behind it, and what is excluded. It states that the final price is confirmed after an on-site inspection.
+
+The estimate is a preliminary range to help the customer decide, not a quote, diagnosis, or guaranteed price.
+
 ## Core Workflow
 
 1. **The contractor creates an intake request and shares its link.** The customer receives it through an existing conversation, such as iMessage or WhatsApp.
@@ -82,7 +92,10 @@ AI analyzes all of the customer’s responses together with the photos and autom
 6. **The customer answers and the questions adapt.** Follow-up questions reflect the answers already given. The app may request another view or a close-up when that would clarify the issue.
 7. **AI analyzes the full intake.** It combines all responses and photos into a coherent service brief, preserving the customer’s statements and identifying unresolved details.
 8. **The contractor portal updates automatically.** The associated request reflects the collected information, generated summary, and any remaining questions. Whether updates happen after each response or on submission remains an implementation decision.
-9. **The technician reviews the request before the visit.** The technician can read the brief and inspect the supporting photos and original answers.
+9. **AI drafts an estimate.** Using the brief and the contractor's price book, AI proposes line items and a low–high range in the portal.
+10. **The contractor approves and releases the estimate.** The contractor edits it as needed, approves it, and releases it to the customer.
+11. **The customer views the estimate.** The customer opens the same link and sees the released range, line items, and assumptions.
+12. **The technician reviews the request before the visit.** The technician can read the brief and estimate and inspect the supporting photos and original answers.
 
 ## Suggested Information to Collect
 
@@ -108,7 +121,9 @@ The AI generates questions about when the water appears, whether cooling still w
 
 AI then analyzes the complete set of answers and photos and updates the contractor portal with the reported symptoms, timing, relevant equipment information, and unanswered questions. The technician can review both the summary and the original material before the visit.
 
-The intake supports preparation. Possible explanations should be labeled as uncertain; the technician remains responsible for diagnosis. Pricing, booking, and a guaranteed repair outcome are not established features.
+AI then drafts an estimate from the business's price book: a diagnostic visit fee, likely condensate-drain clearing labor, and an optional condensate-pump replacement, for a total range such as $150–$450. The contractor adjusts a line, approves the estimate, and releases it. The customer then sees the range, the assumptions, and a note that the final price is confirmed on site.
+
+The intake supports preparation. Possible explanations should be labeled as uncertain; the technician remains responsible for diagnosis. The estimate is a preliminary, contractor-approved range rather than a quote. Booking, payments, and a guaranteed repair outcome are not established features.
 
 ## The Contractor-Facing Component
 
@@ -122,6 +137,8 @@ Its core responsibilities are to:
 - Display an AI-generated summary based on all submitted information.
 - Reflect new customer information in the request as intake is processed.
 - Keep supporting answers and images accessible for technician review.
+- Maintain the business's price book of rates, repairs, and parts.
+- Review, edit, approve, and release AI-drafted estimates.
 
 A proposed service request view could show:
 
@@ -134,8 +151,9 @@ A proposed service request view could show:
 | Question-and-answer history | Preserve the full intake for review. |
 | Missing or conflicting information | Show details that still need confirmation. |
 | Intake status | Indicate whether information is still being collected or is ready for review. |
+| Estimate | Show the AI-drafted line items and range, the contractor's edits, and approval/release status. |
 
-These display fields are proposed implementation details. Scheduling, payments, dispatch, and external job-management integrations remain outside the confirmed scope.
+These display fields are proposed implementation details. Scheduling, payments, invoicing, dispatch, and external job-management integrations remain outside the confirmed scope.
 
 ## The Customer-Facing Component
 
@@ -148,6 +166,7 @@ This is the clearest part of the agreed concept. It should provide:
 - Adaptive follow-up questions based on the customer’s answers.
 - Requests for additional photos when useful.
 - A simple submission process.
+- A view of the estimate once the contractor has released it, through the same link.
 
 Because customers may open links from mobile messaging apps, a mobile-friendly form is a sensible design requirement, although the excerpt does not discuss its visual design.
 
@@ -155,11 +174,12 @@ Because customers may open links from mobile messaging apps, a mobile-friendly f
 
 The defining feature is the connected workflow from **photo to adaptive questions to an automatically updated contractor portal**.
 
-AI has three core roles:
+AI has four core roles:
 
 1. **Visual analysis:** inspect the initial image and identify relevant visible details and information gaps.
 2. **Adaptive questioning:** generate useful questions for that specific issue, then adjust follow-ups as the customer responds.
 3. **Response synthesis and portal updates:** analyze all answers and images together, organize the information, and update the associated contractor request.
+4. **Estimate drafting:** match the brief to the contractor's price book, propose line items and quantity ranges, and state assumptions. It never sets prices itself.
 
 The result should help the technician understand the situation without manually reconstructing it from scattered messages. The portal should preserve original customer information, distinguish observed facts from possible explanations, and make uncertainty visible. If an image is unclear, the app should ask for clarification rather than invent details.
 
@@ -177,14 +197,16 @@ The MVP should demonstrate one complete photo-first intake journey:
 6. AI analyzes the complete intake and generates a structured service brief.
 7. The contractor portal automatically updates the correct request with the summary, photos, answers, and unresolved details.
 8. The contractor reviews the brief and its source material.
+9. AI drafts an estimate from the contractor's price book.
+10. The contractor approves and releases the estimate, and the customer views it through the same link.
 
 HVAC and plumbing are candidate initial use cases. The first version should focus on one trade so the questions and resulting brief can be evaluated against a concrete workflow.
 
-Payments, scheduling, automated messaging, and a full field-service management platform are not confirmed MVP requirements.
+Payments, invoicing, binding quotes, scheduling, automated messaging, and a full field-service management platform are not confirmed MVP requirements.
 
 ## Expected Value
 
-For customers, the intended value is a quick way to provide service information without extra setup.
+For customers, the intended value is a quick way to provide service information without extra setup, and an early idea of likely cost.
 
 For contractors, the proposed value is receiving useful information in a consistent format before handling a job. Better preparation, fewer clarification messages, and less administrative work are benefits to validate with actual service businesses.
 
@@ -202,8 +224,11 @@ The most clearly defined product principle is convenience: customers should part
 - Which AI model and image-processing approach should power intake?
 - Does the app need direct messaging integrations, or is manual link sharing sufficient?
 - How will the team measure whether intake improves preparation or reduces administrative work?
-- What is the pricing model?
+- What is the product's own pricing model for contractors?
+- Which starter price-book items does the first trade need?
+- How should customers learn that an estimate has been released, beyond the contractor re-sharing the link?
+- Should customers be able to accept or decline an estimate in a later version?
 
 ## Short Product Description
 
-A browser-based AI intake assistant for technicians and service businesses. Customers open a shared link, photograph the problem, and answer questions generated specifically from their photo and responses—without downloading an app or creating an account. AI analyzes the full intake and automatically updates the contractor portal with a structured service brief, supporting photos, customer answers, and details that still need confirmation.
+A browser-based AI intake assistant for technicians and service businesses. Customers open a shared link, photograph the problem, and answer questions generated specifically from their photo and responses—without downloading an app or creating an account. AI analyzes the full intake and automatically updates the contractor portal with a structured service brief, supporting photos, customer answers, and details that still need confirmation. It then drafts an estimate range from the contractor's own price book, which the contractor approves before the customer sees it.
