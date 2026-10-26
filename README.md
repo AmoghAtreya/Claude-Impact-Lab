@@ -1,4 +1,4 @@
-# OneTrip
+# OneTrip: https://youtu.be/2GE_skZvpVo
 
 **Know what's broken before you roll the truck.** Built for the Claude Impact Lab hackathon (2026-10-25). First trade: HVAC.
 
