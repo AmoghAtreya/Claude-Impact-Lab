@@ -91,7 +91,7 @@ Other scripts: `npm run lint`, `npm run build`, `npm start`.
 - `docs/Technical_Specifications.md`: features, routes, data model, status model
 - `docs/design/`: design direction, the clickable prototype, and design guardrails
 
-## Team
+## Team (Individual contributions noted below)
 
 **Abdulsaboor — UX, Design & Product Storytelling Lead.** Led the user experience and visual direction: user journeys, wireframes and interface design. Shaped the problem statement and pitch narrative, guided final scope decisions, and connected the product experience to the demo story.
 
