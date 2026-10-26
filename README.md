@@ -91,6 +91,15 @@ Other scripts: `npm run lint`, `npm run build`, `npm start`.
 - `docs/Technical_Specifications.md`: features, routes, data model, status model
 - `docs/design/`: design direction, the clickable prototype, and design guardrails
 
+Setting it up as a business
+1. Sign up with an email, then enter the business name, trade, contact details and timezone. Tick "Prepare estimates" if you want quotes.
+2. Optional: on the Price book page, upload a price list or invoices (PDF, CSV, text or a photo), then review and approve the suggested items. HVAC shops can start from a template.
+3. Create a request with the customer's name and what you already know, then copy or share the link by text, WhatsApp or email.
+4. When the customer submits, open the request to read the brief and, if enabled, review and send the estimate.
+
+Impact on the business's operations
+Today, a small HVAC or plumbing shop starts most jobs blind: the first visit is spent working out what's wrong, and if the fix needs a part that isn't on the truck, a second trip follows. OneTrip moves that diagnosis to before anyone leaves the shop. The technician sees the equipment, its model number and what the customer is reporting, so they can load the likely part and book the right amount of time. That turns more visits into one-trip fixes and frees the hours a return visit would have taken for another paying job. The office stops playing phone tag to gather details, because the customer answers once, on their own time, from their phone. And businesses that turn on estimates can send a realistic, owner-approved price range before the visit, so customers who decide to go ahead already know roughly what it will cost. Overall, intake becomes the step that plans the job instead of the first step of figuring it out.
+
 ## Team (Individual contributions noted below)
 
 **Abdulsaboor — UX, Design & Product Storytelling Lead.** Led the user experience and visual direction: user journeys, wireframes and interface design. Shaped the problem statement and pitch narrative, guided final scope decisions, and connected the product experience to the demo story.
